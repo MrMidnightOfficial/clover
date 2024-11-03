@@ -15,9 +15,9 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub fn new(local_count: usize, function_index: usize, stack_size: usize) -> Frame {
+    pub fn new(local_variable_count: usize, function_index: usize, stack_size: usize) -> Frame {
         let mut locals = Vec::new();
-        for _ in 0..local_count {
+        for _ in 0..local_variable_count {
             locals.push(Object::Null);
         };
 
@@ -30,6 +30,7 @@ impl Frame {
     }
 }
 
+#[derive(Debug)]
 pub struct State {
     globals: HashMap<String, Object>,
     locals: Vec<Object>,
@@ -43,7 +44,7 @@ impl From<Program> for State {
     fn from(program: Program) -> Self {
         let mut locals = Vec::new();
 
-        for i in 0..program.local_count {
+        for i in 0..program.local_variable_count {
             locals.push(if let Some(constant_index) = program.local_values.get(&i) {
                 program.constants.get(*constant_index).unwrap().clone()
             } else {
@@ -75,7 +76,7 @@ impl State {
             return Err(RuntimeError::new("too many parameters", Position::none()));
         }
 
-        let mut frame = Frame::new(function.local_count, function_index, self.stack.len());
+        let mut frame = Frame::new(function.local_variable_count, function_index, self.stack.len());
 
         for (i, object) in parameters.iter().enumerate() {
             frame.locals[i] = object.clone();
@@ -263,9 +264,9 @@ impl State {
     }
 
     fn call_native_function(&mut self, function: NativeFunction, parameters: &[ Object ]) -> Result<(), RuntimeError> {
-            let result = function(self, parameters)?;
-            self.push(result);
-            Ok(())
+        let result = function(self, parameters)?;
+        self.push(result);
+        Ok(())
     }
 
     fn call_instance_native_function(&mut self, instance: Reference<dyn NativeModelInstance>, function_name: &str, parameters: &[ Object ]) -> Result<(), RuntimeError> {

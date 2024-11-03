@@ -12,7 +12,7 @@ pub type BreakScope = Vec<usize>;
 pub struct FunctionState {
     pub is_instance: bool,
     pub parameter_count: usize,
-    pub local_count: usize,
+    pub local_variable_count: usize,
     pub depth: usize,
     pub rescue_position: usize,
     pub scopes: Vec<Scope>,
@@ -26,7 +26,7 @@ impl FunctionState {
         let mut function_state = FunctionState {
             is_instance: false,
             parameter_count: 0,
-            local_count: 0,
+            local_variable_count: 0,
             depth: 0,
             rescue_position: 0,
             scopes: Vec::new(),
@@ -148,9 +148,9 @@ impl FunctionState {
                 return None;
             };
 
-            let index = self.local_count;
+            let index = self.local_variable_count;
             scope.insert(name.to_string(), index);
-            self.local_count += 1;
+            self.local_variable_count += 1;
             Some(index)
         } else {
             None
@@ -158,8 +158,8 @@ impl FunctionState {
     }
 
     pub fn define_anonymous_local(&mut self) -> usize {
-        let index = self.local_count;
-        self.local_count += 1;
+        let index = self.local_variable_count;
+        self.local_variable_count += 1;
         index
     }
 

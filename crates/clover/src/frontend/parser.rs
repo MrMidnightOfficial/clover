@@ -21,7 +21,7 @@ enum SymbolPriority {
 
 struct ParserState<'a> {
     tokens: Iter<'a, Token>,
-    last_token: Token,
+    previous_token: Token,
     current_token: Token,
     peek_token: Token,
     errors: CompileErrorList
@@ -29,7 +29,7 @@ struct ParserState<'a> {
 
 impl<'a> ParserState<'a> {
     fn next_token(&mut self) {
-        self.last_token = self.current_token.clone();
+        self.previous_token = self.current_token.clone();
         self.current_token = self.peek_token.clone();
 
         if let Some(token) = self.tokens.next() {
@@ -204,7 +204,7 @@ impl<'a> ParserState<'a> {
         }
         self.next_token();
 
-        let mut expect_end = true;
+        let mut expect_end_token = true;
 
         if let Some(condition) = self.parse_expression(SymbolPriority::Lowest) {
             let true_part = self.parse_body(&[ TokenValue::End, TokenValue::Else, TokenValue::ElseIf, TokenValue::Eof ]);
@@ -215,7 +215,7 @@ impl<'a> ParserState<'a> {
                 self.next_token();
                 false_part = Some(self.parse_body(&[ TokenValue::End, TokenValue::Eof ]))
             } else if self.current_token.value == TokenValue::ElseIf {
-                expect_end = false;
+                expect_end_token = false;
 
                 if let Some(expression) = self.parse_if_expression() {
                     let statements = vec![ Statement::Expression(expression) ];
@@ -225,7 +225,7 @@ impl<'a> ParserState<'a> {
                 };
             }
 
-            if expect_end && !self.expect_and_pop_token(TokenValue::End) {
+            if expect_end_token && !self.expect_and_pop_token(TokenValue::End) {
                 return None;
             };
 
@@ -371,7 +371,7 @@ impl<'a> ParserState<'a> {
         // if '-' or '(' or '[' is the first token at line, it's not a infix expression
         match self.current_token.value {
             TokenValue::Minus | TokenValue::LeftParentheses | TokenValue::LeftBracket => {
-                if self.current_token.position.line > self.last_token.position.line {
+                if self.current_token.position.line > self.previous_token.position.line {
                     return None;
                 };
             },
@@ -424,31 +424,22 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    fn parse_return_statement(&mut self) -> Option<Statement> {
-        let return_statement = ReturnStatement {
-            token: self.current_token.clone()
-        };
+    fn parse_simple_statement(&mut self, statement_type: fn(Token) -> Statement) -> Option<Statement> {
+        let statement = statement_type(self.current_token.clone());
         self.next_token();
+        Some(statement)
+    }
 
-        Some(Statement::Return(return_statement))
+    fn parse_return_statement(&mut self) -> Option<Statement> {
+        self.parse_simple_statement(|token| Statement::Return(ReturnStatement { token }))
     }
 
     fn parse_break_statement(&mut self) -> Option<Statement> {
-        let break_statement = BreakStatement {
-            token: self.current_token.clone()
-        };
-        self.next_token();
-
-        Some(Statement::Break(break_statement))
+        self.parse_simple_statement(|token| Statement::Break(BreakStatement { token }))
     }
 
     fn parse_rescue_statement(&mut self) -> Option<Statement> {
-        let rescue_statement = RescueStatement {
-            token: self.current_token.clone()
-        };
-        self.next_token();
-
-        Some(Statement::Rescue(rescue_statement))
+        self.parse_simple_statement(|token| Statement::Rescue(RescueStatement { token }))
     }
 
     fn parse_expression_statement(&mut self) -> Option<Statement> {
@@ -883,7 +874,7 @@ pub fn parse(source: &str, filename: &str) -> Result<Document, CompileErrorList>
 
     let mut state = ParserState {
         tokens: token_list.iter(),
-        last_token: Token::none(),
+        previous_token: Token::none(),
         current_token: Token::none(),
         peek_token: Token::none(),
         errors: CompileErrorList::new(filename)

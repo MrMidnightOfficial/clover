@@ -2,7 +2,7 @@ mod frontend;
 mod intermediate;
 mod backend;
 mod runtime;
-mod version;
+pub mod version;
 
 pub use runtime::program::Program;
 pub use runtime::state::State;
@@ -53,7 +53,7 @@ impl Clover {
 
         let mut writer = self.storage.get_writer(filename)?;
 
-        program.serialize(writer.deref_mut()).unwrap();
+        program.serialize(writer.deref_mut(), true).unwrap();
 
         Ok(())
     }
@@ -61,7 +61,7 @@ impl Clover {
     pub fn load_program(&self, filename: &str) -> Result<Program, debug::CompileErrorList> {
         let mut reader = self.storage.get_reader(filename)?;
 
-        Ok(Program::deserialize(&mut reader).unwrap())
+        Ok(Program::deserialize(&mut reader, true).unwrap())
     }
 
     pub fn create_state_by_filename(&self, filename: &str) -> Result<State, debug::CompileErrorList> {
@@ -114,6 +114,7 @@ mod tests {
         let clover = Clover::new();
 
         let result = clover.create_state_by_filename(filename);
+        println!("create state: {:?}", result);
 
         assert!(result.is_ok(), "create state with with file [{}]", filename);
 

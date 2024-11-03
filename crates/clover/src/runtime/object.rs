@@ -20,7 +20,7 @@ pub struct ModelInstance {
     pub properties: Vec<Object>
 }
 
-pub trait NativeModel {
+pub trait NativeModel: std::fmt::Debug {
     // model constructor
     fn call(&mut self, state: &mut State, _parameters: &[Object]) -> Result<Object, RuntimeError> { Err(RuntimeError::new("this native model do not have constructor", state.last_position())) }
 

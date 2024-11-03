@@ -3,6 +3,14 @@ use crate::runtime::program::RuntimeError;
 use crate::runtime::object::Object;
 
 impl State {
+    /// Advances the iterator of the current enumerable object in the runtime state.
+    ///
+    /// This function is responsible for iterating over different types of enumerable objects
+    /// (integers, arrays, and instances) and pushing the next value onto the stack. It also
+    /// pushes a boolean value indicating whether the loop should continue or not.
+    ///
+    /// # Errors
+    /// This function may return a `RuntimeError` if the enumerable object is not a valid type.
     pub fn for_next(&mut self, enumerable_index: usize) -> Result<(), RuntimeError> {
         let iterator_index = enumerable_index + 1;
 

@@ -5,6 +5,7 @@ use std::f64::consts::PI;
 mod pow;
 mod trigonometric;
 
+#[derive(Debug)]
 pub struct Math;
 
 impl NativeModel for Math {

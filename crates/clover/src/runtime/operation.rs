@@ -152,8 +152,20 @@ impl State {
 
     fn float_div(&self, left: f64, right: &Object) -> Result<Object, RuntimeError> {
         match right {
-            Object::Float(value) => Ok(Object::Float(left / value)),
-            Object::Integer(value) => Ok(Object::Float(left / *value as f64)),
+            Object::Float(value) => {
+                if *value == 0.0 {
+                    Err(RuntimeError::new("divide by zero", self.last_position()))
+                } else {
+                    Ok(Object::Float(left / value))
+                }
+            },
+            Object::Integer(value) => {
+                if *value == 0 {
+                    Err(RuntimeError::new("divide by zero", self.last_position()))
+                } else {
+                    Ok(Object::Float(left / *value as f64))
+                }
+            },
 
             _ => Err(RuntimeError::new("can not sub float with object", self.last_position()))
         }

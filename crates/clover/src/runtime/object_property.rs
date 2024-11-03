@@ -5,7 +5,7 @@ use std::ops::Deref;
 
 pub fn instance_get_integer(state: &mut State, value: i64, key: &str) -> Result<(), RuntimeError> {
 
-    let object =match key {
+    let object = match key {
         "string" => Object::String(make_reference(value.to_string())),
         "integer" => Object::Integer(value),
         "float" => Object::Float(value as f64),

@@ -1,45 +1,46 @@
 use crate::intermediate::{ Token, TokenValue, Position, TokenList, CompileErrorList };
+
 use std::iter::Peekable;
 use std::str::Chars;
 
+/// A macro to match a token value with a value from a list of options.
+///
+/// This macro takes a token value and a list of options in the form of
+/// `key => value`. It will return `Some(value)` if the token matches `key`
+/// and `None` otherwise.
 macro_rules! match_token {
     ($token: ident, $($key: expr => $value: expr), *) => {
         match $token {
-        $(
-            $key => Some($value),
-        )*
+            $( $key => return Some($value), )*
             _ => None
         }
     }
 }
 
+
 struct LexState<'a> {
     source: Peekable<Chars<'a>>,
-    position: Position,
-    current: char
+    position: Position, /// The current position in the source
+    current: Option<char>
 }
 
 impl<'a> LexState<'a> {
     fn skip_spaces_and_comments(&mut self) {
-        while is_space(self.current) || is_comment_prefix(self.current) {
-            while is_space(self.current) {
+        while self.current.map_or(false, |c| is_space(c) || is_comment_prefix(c)) {
+            if self.current.map_or(false, is_space) {
                 self.next_character();
-            };
-
-            if is_comment_prefix(self.current) {
+            } else if self.current.map_or(false, is_comment_prefix) {
                 self.skip_comment();
-            };
-        };
-    }
-
+            }
+        }
+    }    
     fn skip_comment(&mut self) {
-        while self.next_character().is_some() && self.current != '\n' {};
+        while self.next_character().is_some() && self.current != Some('\n') {};
     }
 
     fn next_character(&mut self) -> Option<char> {
         if let Some(character) = self.source.next() {
-
-            self.current = character;
+            self.current = Some(character);
             self.position.column += 1;
 
             if character == '\n' {
@@ -47,47 +48,39 @@ impl<'a> LexState<'a> {
                 self.position.column = 0;
             };
 
-            return Some(character);
-        };
-
-        self.current = '\0';
-        None
+            Some(character)
+        } else {
+            self.current = None;
+            None
+        }
     }
 
     fn lex_string(&mut self) -> Token {
         let position = self.position;
         let mut value = String::new();
-        let mut escaping = false;
+        let mut is_escaping = false; // Flag to track if the previous character was a backslash
 
         while let Some(character) = self.next_character() {
-            if escaping {
+            if is_escaping {
                 value.push(match character {
                     '\\' | '\"' => character,
                     't' => '\t',
                     'n' => '\n',
                     'r' => '\r',
-                    _ => character
+                    _ => character,
                 });
-
-                escaping = false;
-
-                continue;
-            };
-
-            if character == '\"' {
+                is_escaping = false;
+            } else if character == '\"' {
                 break;
-            };
-
-            if character == '\\' {
-                escaping = true;
-                continue;
-            };
-
-            value.push(character);
+            } else if character == '\\' {
+                is_escaping = true;
+            } else {
+                value.push(character);
+            }
         }
 
-        if self.current != '\"' {
-            return Token::new(TokenValue::Invalid("end of file while parsing string".to_string()), position);
+        if self.current != Some('\"') {
+            return Token::new(TokenValue::Invalid("EOF while parsing string".to_string()), position);
         };
 
         // we stop at " character, so move to next
@@ -98,36 +91,28 @@ impl<'a> LexState<'a> {
 
     fn lex_number(&mut self) -> Token {
         let position = self.position;
-
         let mut number_string = String::new();
         let mut is_float = false;
 
-        let mut character = self.current;
-
-        while is_number(character) || character == '.' {
-            if character == '.' {
-                if is_float {
+        while let Some(c) = self.current {
+            if is_number(c) {
+                number_string.push(c);
+            } else if c == '.' {
+                if is_float || !is_number(self.peek()) {
                     break;
                 }
-
-                if !is_number(self.peek()) {
-                    break;
-                }
-
                 is_float = true;
-            };
-
-            number_string.push(character);
-
+                number_string.push(c);
+            } else {
+                break;
+            }
             self.next_character();
-            character = self.current;
-        };
+        }
 
-        // TODO : add error handling
-        let value = if is_float {
-            TokenValue::Float(number_string.parse().unwrap())
-        } else {
-            TokenValue::Integer(number_string.parse().unwrap())
+        let value = match number_string.parse::<f64>() {
+            Ok(num) if is_float => TokenValue::Float(num),
+            Ok(num) => TokenValue::Integer(num as i64),
+            Err(_) => TokenValue::Invalid(format!("Invalid number '{}'", number_string)),
         };
 
         Token::new(value, position)
@@ -138,13 +123,13 @@ impl<'a> LexState<'a> {
         let position = self.position;
 
         loop {
-            identifier.push(self.current);
+            identifier.push(self.current.expect("Current character should be valid"));
 
             if self.next_character().is_none() {
                 break;
             };
 
-            if !is_identifier(self.current) && !is_number(self.current) {
+            if !is_identifier(self.current.expect("Current character should be valid")) && !is_number(self.current.expect("Current character should be valid")) {
                 break;
             };
         };
@@ -160,29 +145,26 @@ impl<'a> LexState<'a> {
     fn lex_symbol(&mut self) -> Token {
         let position = self.position;
 
-        let symbol_string = String::from(self.current);
+        let symbol_string = self.current.map(|c| c.to_string()).unwrap_or_default();
 
         self.next_character();
 
-        if is_symbol(self.current) {
-            let mut multi_character_symbol_string = symbol_string.clone();
-            multi_character_symbol_string.push(self.current);
+        if let Some(current) = self.current {
+            if is_symbol(current) {
+                let mut multi_character_symbol_string = symbol_string.clone();
+                multi_character_symbol_string.push(current);
 
-            if let Some(symbol) = get_symbol(multi_character_symbol_string.as_str()) {
-                self.next_character();
-                return Token::new(symbol, position);
-            };
-        };
+                if let Some(symbol) = get_symbol(multi_character_symbol_string.as_str()) {
+                    self.next_character();
+                    return Token::new(symbol, position);
+                }
+            }
+        }
 
         Token::new(get_symbol(symbol_string.as_str()).unwrap(), position)
     }
-
     fn peek(&mut self) -> char {
-        if let Some(&character) = self.source.peek() {
-            character
-        } else {
-            '\0'
-        }
+        self.source.peek().copied().unwrap_or('\0')
     }
 }
 
@@ -192,40 +174,26 @@ impl<'a> Iterator for LexState<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_spaces_and_comments();
 
-        let character = self.current;
+        let character = self.current?;
 
-        if character == '\0' {
-            return None;
-        };
-
-        if is_identifier(character) {
-            return Some(self.lex_identifier());
-        };
-
-        if is_string(character) {
-            return Some(self.lex_string());
-        };
-
-        if is_number(character) {
-            return Some(self.lex_number());
-        };
-
-        if is_symbol(character) {
-            return Some(self.lex_symbol());
-        };
-
-        self.next_character();
-        Some(Token::new(TokenValue::Invalid(format!("unknown character [{}]", character)), self.position))
+        match character {
+            '\0' => return None,
+            _ if is_identifier(character) => return Some(self.lex_identifier()),
+            _ if is_string(character) => return Some(self.lex_string()),
+            _ if is_number(character) => return Some(self.lex_number()),
+            _ if is_symbol(character) => return Some(self.lex_symbol()),
+            _ => {
+                self.next_character();
+                Some(Token::new(TokenValue::Invalid(format!("Unknown character [{}]", character)), self.position))
+            }
+        }    
     }
 }
 
 // character helpers
 
 fn is_space(character: char) -> bool {
-    match character {
-        ' ' | '\t' | '\r' | '\n' => true,
-        _ => false
-    }
+    matches!(character, ' ' | '\t' | '\r' | '\n')
 }
 
 fn is_string(character: char) -> bool {
@@ -233,17 +201,11 @@ fn is_string(character: char) -> bool {
 }
 
 fn is_number(character: char) -> bool {
-    match character {
-        '0'..='9' => true,
-        _ => false
-    }
+    character.is_ascii_digit()
 }
 
 fn is_alpha(character: char) -> bool {
-    match character {
-        'a'..='z' | 'A'..='Z' => true,
-        _ => false
-    }
+    character.is_ascii_alphabetic()
 }
 
 fn is_identifier(character: char) -> bool {
@@ -260,7 +222,7 @@ fn is_symbol(character: char) -> bool {
     get_symbol(string.as_str()).is_some()
 }
 
-// token helpers
+// token helper functions
 
 fn get_keyword(keyword: &str) -> Option<TokenValue> {
     match_token! {
@@ -334,12 +296,13 @@ fn get_symbol(symbol: &str) -> Option<TokenValue> {
     }
 }
 
+
 // the main lex function
 pub fn lex(source: &str) -> Result<TokenList, CompileErrorList> {
     let mut state = LexState {
         source: source.chars().peekable(),
         position: Position::new(1, 0),
-        current: '\0'
+        current: Some('\0')
     };
 
     state.next_character();
@@ -348,9 +311,86 @@ pub fn lex(source: &str) -> Result<TokenList, CompileErrorList> {
 
     while let Some(token) = state.next() {
         tokens.push(token);
-    };
-
+    }
+    
+    // Add an Eof token to mark the end of the input stream.
     tokens.push(Token::new(TokenValue::Eof, state.position));
 
     Ok(tokens)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::frontend::lexer::get_keyword;
+    use crate::frontend::lexer::get_symbol;
+    use crate::intermediate::TokenValue;
+
+    #[test]
+    fn test_get_keyword() {
+        assert_eq!(get_keyword("true"), Some(TokenValue::True));
+        assert_eq!(get_keyword("false"), Some(TokenValue::False));
+        assert_eq!(get_keyword("null"), Some(TokenValue::Null));
+
+        assert_eq!(get_keyword("and"), Some(TokenValue::And));
+        assert_eq!(get_keyword("or"), Some(TokenValue::Or));
+        assert_eq!(get_keyword("not"), Some(TokenValue::Not));
+
+        assert_eq!(get_keyword("include"), Some(TokenValue::Include));
+        assert_eq!(get_keyword("from"), Some(TokenValue::From));
+        assert_eq!(get_keyword("model"), Some(TokenValue::Model));
+        assert_eq!(get_keyword("function"), Some(TokenValue::Function));
+        assert_eq!(get_keyword("end"), Some(TokenValue::End));
+        assert_eq!(get_keyword("implement"), Some(TokenValue::Implement));
+        assert_eq!(get_keyword("local"), Some(TokenValue::Local));
+        assert_eq!(get_keyword("apply"), Some(TokenValue::Apply));
+        assert_eq!(get_keyword("to"), Some(TokenValue::To));
+        assert_eq!(get_keyword("return"), Some(TokenValue::Return));
+        assert_eq!(get_keyword("public"), Some(TokenValue::Public));
+        assert_eq!(get_keyword("as"), Some(TokenValue::As));
+        assert_eq!(get_keyword("this"), Some(TokenValue::This));
+        assert_eq!(get_keyword("if"), Some(TokenValue::If));
+        assert_eq!(get_keyword("else"), Some(TokenValue::Else));
+        assert_eq!(get_keyword("elseif"), Some(TokenValue::ElseIf));
+        assert_eq!(get_keyword("while"), Some(TokenValue::While));
+        assert_eq!(get_keyword("for"), Some(TokenValue::For));
+        assert_eq!(get_keyword("in"), Some(TokenValue::In));
+        assert_eq!(get_keyword("break"), Some(TokenValue::Break));
+
+        assert_eq!(get_keyword("rescue"), Some(TokenValue::Rescue));
+    }
+
+    #[test]
+    fn test_get_symbol() {
+        assert_eq!(get_symbol("="), Some(TokenValue::Assign));
+        assert_eq!(get_symbol("+"), Some(TokenValue::Plus));
+        assert_eq!(get_symbol("-"), Some(TokenValue::Minus));
+        assert_eq!(get_symbol("*"), Some(TokenValue::Star));
+        assert_eq!(get_symbol("/"), Some(TokenValue::Slash));
+        assert_eq!(get_symbol("%"), Some(TokenValue::Percent));
+        assert_eq!(get_symbol("!"), Some(TokenValue::Not));
+        assert_eq!(get_symbol("("), Some(TokenValue::LeftParentheses));
+        assert_eq!(get_symbol(")"), Some(TokenValue::RightParentheses));
+        assert_eq!(get_symbol("["), Some(TokenValue::LeftBracket));
+        assert_eq!(get_symbol("]"), Some(TokenValue::RightBracket));
+        assert_eq!(get_symbol(","), Some(TokenValue::Comma));
+        assert_eq!(get_symbol(":"), Some(TokenValue::Colon));
+        assert_eq!(get_symbol("&"), Some(TokenValue::BitAnd));
+        assert_eq!(get_symbol("|"), Some(TokenValue::BitOr));
+        assert_eq!(get_symbol("."), Some(TokenValue::Dot));
+        assert_eq!(get_symbol(">"), Some(TokenValue::Greater));
+        assert_eq!(get_symbol("<"), Some(TokenValue::Less));
+
+        assert_eq!(get_symbol("=="), Some(TokenValue::Equal));
+        assert_eq!(get_symbol("!="), Some(TokenValue::NotEqual));
+        assert_eq!(get_symbol("&&"), Some(TokenValue::And));
+        assert_eq!(get_symbol("||"), Some(TokenValue::Or));
+        assert_eq!(get_symbol(">="), Some(TokenValue::GreaterEqual));
+        assert_eq!(get_symbol("<="), Some(TokenValue::LessEqual));
+        assert_eq!(get_symbol("+="), Some(TokenValue::PlusAssign));
+        assert_eq!(get_symbol("-="), Some(TokenValue::MinusAssign));
+        assert_eq!(get_symbol("*="), Some(TokenValue::StarAssign));
+        assert_eq!(get_symbol("/="), Some(TokenValue::SlashAssign));
+        assert_eq!(get_symbol("%="), Some(TokenValue::PercentAssign));
+    }
 }

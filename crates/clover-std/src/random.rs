@@ -4,6 +4,7 @@ use clover::{NativeModel, NativeModelInstance, Object, State, Reference};
 use clover::debug::{Position, RuntimeError};
 use clover::helper::make_reference;
 
+#[derive(Debug)]
 pub struct Random;
 
 impl NativeModel for Random {

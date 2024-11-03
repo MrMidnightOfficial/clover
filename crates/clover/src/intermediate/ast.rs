@@ -216,7 +216,6 @@ impl Document {
             };
         };
     }
-
     pub fn get_dependencies(&self) -> Vec<String> {
         let mut filenames = Vec::new();
 

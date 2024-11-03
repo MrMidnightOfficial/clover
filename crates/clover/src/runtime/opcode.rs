@@ -16,6 +16,7 @@ pub const OPERATION_LESS_EQUAL: usize = 9;
 pub const OPERATION_AND: usize = 256 | 1;
 pub const OPERATION_OR: usize = 256 | 2;
 
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum OpCode {
     Pop             = 0x01,
@@ -124,7 +125,7 @@ impl Instruction {
             0x56 => OpCode::ForNext,
             0x57 => OpCode::Iterate,
 
-            _ => OpCode::Unknown
+            _    => OpCode::Unknown
         }
     }
 

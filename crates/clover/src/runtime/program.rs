@@ -10,6 +10,11 @@ use crate::runtime::state::Frame;
 use std::io::{Write, Read};
 use byteorder::{ReadBytesExt, LittleEndian, WriteBytesExt};
 
+use flate2::write::GzEncoder;
+use flate2::read::GzDecoder;
+use flate2::Compression;
+//use bzip2::write::BzEncoder;
+
 #[derive(Debug, Clone)]
 pub struct RuntimeError {
     pub message: String,
@@ -39,6 +44,7 @@ impl Error for RuntimeError {}
 #[derive(Debug, Clone)]
 pub struct Model {
     pub property_indices: HashMap<String, usize>,
+    pub version: Vec<Reference<String>>,
     pub functions: HashMap<String, usize>,
 
     pub property_names: Vec<Reference<String>>
@@ -48,6 +54,7 @@ impl Model {
     pub fn new() -> Model {
         Model {
             property_indices: HashMap::new(),
+            version: Vec::new(),
             functions: HashMap::new(),
             property_names: Vec::new()
         }
@@ -66,6 +73,7 @@ impl Model {
 
     fn serialize(&self, writer: &mut dyn Write) -> Result<(), std::io::Error>  {
         writer.write_u32::<LittleEndian>(self.property_names.len() as u32)?;
+        
 
         for property_name_reference in &self.property_names {
             let property_name = property_name_reference.borrow();
@@ -106,7 +114,7 @@ impl Model {
 #[derive(Debug, Clone)]
 pub struct Function {
     pub parameter_count: usize,
-    pub local_count: usize,
+    pub local_variable_count: usize,
     pub rescue_position: usize,
     pub is_instance: bool,
 
@@ -117,7 +125,7 @@ impl Function {
     pub fn new() -> Function {
         Function {
             parameter_count: 0,
-            local_count: 0,
+            local_variable_count: 0,
             rescue_position: 0,
             is_instance: false,
 
@@ -127,7 +135,7 @@ impl Function {
 
     fn serialize(&self, writer: &mut dyn Write) -> Result<(), std::io::Error>  {
         writer.write_u32::<LittleEndian>(self.parameter_count as u32)?;
-        writer.write_u32::<LittleEndian>(self.local_count as u32)?;
+        writer.write_u32::<LittleEndian>(self.local_variable_count as u32)?;
         writer.write_u32::<LittleEndian>(self.rescue_position as u32)?;
         writer.write_u8(if self.is_instance { 1 } else { 0 })?;
 
@@ -142,7 +150,7 @@ impl Function {
 
     fn deserialize(reader: &mut dyn Read) -> Result<Function, std::io::Error> {
         let parameter_count = reader.read_u32::<LittleEndian>()? as usize;
-        let local_count = reader.read_u32::<LittleEndian>()? as usize;
+        let local_variable_count = reader.read_u32::<LittleEndian>()? as usize;
         let rescue_position = reader.read_u32::<LittleEndian>()? as usize;
         let is_instance = reader.read_u8()?;
 
@@ -155,7 +163,7 @@ impl Function {
 
         Ok(Function {
             parameter_count,
-            local_count,
+            local_variable_count,
             rescue_position,
             is_instance: is_instance == 1,
             instructions
@@ -172,7 +180,7 @@ pub struct Program {
     // constant indices point to name of global
     pub global_dependencies: Vec<usize>,
 
-    pub local_count: usize,
+    pub local_variable_count: usize,
 
     // use to init local variable, key is local index, value is constant index
     pub local_values: HashMap<usize, usize>,
@@ -200,12 +208,9 @@ fn deserialize_string(reader: &mut dyn Read) -> Result<String, std::io::Error> {
 
     reader.read(&mut buffer)?;
 
-    if let Ok(string) = String::from_utf8(buffer) {
-        Ok(string)
-    } else {
-        // TODO : change error type
-        Err(std::io::Error::from_raw_os_error(0))
-    }
+    String::from_utf8(buffer).map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, "can't convert bytes to string")
+    })
 }
 
 impl Program {
@@ -220,26 +225,41 @@ impl Program {
     const OBJECT_TYPE_MODEL: u8 = 3;
     const OBJECT_TYPE_FUNCTION: u8 = 4;
 
-    // luck
-    const HEADER: u32 = 0x6b63756c;
+    // PieScript
+    const HEADER: u128 = 0x747069726353656950;
 
-    pub fn serialize(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
-        writer.write_u32::<LittleEndian>(Program::HEADER)?;
+    pub fn serialize(&self, writer: &mut dyn Write, compress: bool) -> Result<(), std::io::Error> {
+        writer.write_u128::<LittleEndian>(Program::HEADER)?;
         writer.write_u8(crate::version::MAJOR)?;
         writer.write_u8(crate::version::MINOR)?;
         writer.write_u8(crate::version::PATCH)?;
         writer.write_u8(0)?;
+        // First, we will use Bzip2 compression
+        //let mut bz_writer = BzEncoder::new(writer, bzip2::Compression::default());
+
+        // Then, we will use Gzip compression on the Bzip2 compressed data
+        //let mut gz_writer = GzEncoder::new(&mut bz_writer, flate2::Compression::default());
+
+        // Optional Gzip compression
+        let mut writer: Box<dyn Write> = if compress {
+            Box::new(GzEncoder::new(writer, Compression::best()))
+        } else {
+            Box::new(writer)
+        };
+
+        //let mut writer  = &mut gz_writer;
+
 
         // models
         writer.write_u32::<LittleEndian>(self.models.len() as u32)?;
         for model in &self.models {
-            model.serialize(writer)?;
+            model.serialize(writer.as_mut())?;
         };
 
         // functions
         writer.write_u32::<LittleEndian>(self.functions.len() as u32)?;
         for function in &self.functions {
-            function.serialize(writer)?;
+            function.serialize(writer.as_mut())?;
         };
 
         // constants
@@ -258,7 +278,7 @@ impl Program {
                 },
                 Object::String(string) => {
                     writer.write_u8(Program::OBJECT_TYPE_STRING)?;
-                    serialize_string(string.borrow().as_str(), writer)?;
+                    serialize_string(string.borrow().as_str(), writer.as_mut())?;
                 },
                 Object::Model(model_index) => {
                     writer.write_u8(Program::OBJECT_TYPE_MODEL)?;
@@ -282,7 +302,7 @@ impl Program {
         };
 
         // local count
-        writer.write_u32::<LittleEndian>(self.local_count as u32)?;
+        writer.write_u32::<LittleEndian>(self.local_variable_count as u32)?;
 
         // local values
         writer.write_u32::<LittleEndian>(self.local_values.len() as u32)?;
@@ -297,8 +317,8 @@ impl Program {
         Ok(())
     }
 
-    pub fn deserialize(reader: &mut dyn Read) -> Result<Program, std::io::Error> {
-        if Program::HEADER != reader.read_u32::<LittleEndian>()? {
+    pub fn deserialize(reader: &mut dyn Read, compressed: bool) -> Result<Program, std::io::Error> {
+        if Program::HEADER != reader.read_u128::<LittleEndian>()? {
             println!("warn: header not match");
         };
 
@@ -318,12 +338,19 @@ impl Program {
             println!("warn: header end not match");
         };
 
+        // Optional Gzip decompression
+        let mut reader: Box<dyn Read> = if compressed {
+            Box::new(GzDecoder::new(reader))
+        } else {
+            Box::new(reader)
+        };
+
         // models
         let mut models = Vec::new();
         let model_count = reader.read_u32::<LittleEndian>()?;
 
         for _ in 0..model_count {
-            models.push(Model::deserialize(reader)?);
+            models.push(Model::deserialize(reader.as_mut())?);
         };
 
         // functions
@@ -331,7 +358,7 @@ impl Program {
         let function_count = reader.read_u32::<LittleEndian>()?;
 
         for _ in 0..function_count {
-            functions.push(Function::deserialize(reader)?);
+            functions.push(Function::deserialize(reader.as_mut())?);
         };
 
         // constants
@@ -349,7 +376,7 @@ impl Program {
                     Object::Float(reader.read_f64::<LittleEndian>()?)
                 },
                 Program::OBJECT_TYPE_STRING => {
-                    Object::String(make_reference(deserialize_string(reader)?))
+                    Object::String(make_reference(deserialize_string(reader.as_mut())?))
                 },
                 Program::OBJECT_TYPE_MODEL => {
                     Object::Model(reader.read_u32::<LittleEndian>()? as usize)
@@ -373,7 +400,7 @@ impl Program {
             global_dependencies.push(reader.read_u32::<LittleEndian>()? as usize);
         };
 
-        let local_count = reader.read_u32::<LittleEndian>()? as usize;
+        let local_variable_count = reader.read_u32::<LittleEndian>()? as usize;
 
         let mut local_values = HashMap::new();
         let local_value_count = reader.read_u32::<LittleEndian>()?;
@@ -391,7 +418,7 @@ impl Program {
             constants,
             global_dependencies,
 
-            local_count,
+            local_variable_count,
             local_values,
 
             entry_point,

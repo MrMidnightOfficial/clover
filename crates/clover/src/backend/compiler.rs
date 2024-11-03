@@ -15,10 +15,25 @@ use crate::runtime::opcode::{OPERATION_ADD, OPERATION_SUB, OPERATION_MULTIPLY, O
 use std::ops::Deref;
 use std::io::{Read, Write, BufReader, BufWriter};
 
+/// The `CompilerContext` struct represents the state of the compiler during the compilation process.
+/// It holds various data structures and information needed for compiling a Clover program, such as:
+///
+/// - `model_definitions`: A vector of `Model` instances representing the models defined in the program.
+/// - `functions`: A vector of `Function` instances representing the functions defined in the program.
+/// - `constants`: A vector of `Object` instances representing the constants used in the program.
+/// - `integer_constants_indices`: A hash map mapping integer constants to their indices in the `constants` vector.
+/// - `string_constants_indices`: A hash map mapping string constants to their indices in the `constants` vector.
+/// - `global_dependencies`: A set of indices of global dependencies used in the program.
+/// - `local_variable_count`: The number of local variables used in the program.
+/// - `assembly_states`: A hash map of `AssemblyState` instances representing the assembly state for each module in the program.
+/// - `local_values`: A hash map mapping local variable indices to their corresponding indices in the `assemblies` hash map.
+/// - `entry_point`: The index of the entry point function in the `functions` vector.
+/// - `file_info`: A `FileInfo` instance containing information about the source file.
+/// - `debug_info`: A `DebugInfo` instance containing debugging information for the compiled program.
 #[derive(Debug)]
 pub struct CompilerContext {
-    models: Vec<Model>,
-    functions: Vec<Function>,
+    model_definitions: Vec<Model>,
+    function_definitions: Vec<Function>,
     constants: Vec<Object>,
 
     integer_constants_indices: HashMap<i64, usize>,
@@ -26,8 +41,8 @@ pub struct CompilerContext {
 
     global_dependencies: HashSet<usize>,
 
-    local_count: usize,
-    assemblies: HashMap<String, AssemblyState>,
+    local_variable_count: usize,
+    assembly_states: HashMap<String, AssemblyState>,
     local_values: HashMap<usize, usize>,
 
     entry_point: usize,
@@ -39,8 +54,8 @@ pub struct CompilerContext {
 impl CompilerContext {
     pub fn new() -> CompilerContext {
         CompilerContext {
-            models: Vec::new(),
-            functions: Vec::new(),
+            model_definitions: Vec::new(),
+            function_definitions: Vec::new(),
             constants: Program::DEFAULT_CONSTANTS.to_vec(),
 
             integer_constants_indices: HashMap::new(),
@@ -48,8 +63,8 @@ impl CompilerContext {
 
             global_dependencies: HashSet::new(),
 
-            local_count: 0,
-            assemblies: HashMap::new(),
+            local_variable_count: 0,
+            assembly_states: HashMap::new(),
             local_values: HashMap::new(),
 
             entry_point: 0,
@@ -104,24 +119,24 @@ impl CompilerContext {
     }
 
     fn add_model(&mut self, model: Model) -> usize {
-        let index = self.models.len();
-        self.models.push(model);
+        let index = self.model_definitions.len();
+        self.model_definitions.push(model);
         index
     }
 
     fn add_function(&mut self, function_state: FunctionState, name: &str, assembly_index: usize) -> usize {
-        let index = self.functions.len();
+        let index = self.function_definitions.len();
 
         let function = Function {
             parameter_count: function_state.parameter_count,
-            local_count: function_state.local_count,
+            local_variable_count: function_state.local_variable_count,
             rescue_position: function_state.rescue_position,
             is_instance: function_state.is_instance,
 
             instructions: function_state.instructions
         };
 
-        self.functions.push(function);
+        self.function_definitions.push(function);
         self.debug_info.functions.push(function_state.positions);
         self.file_info.function_names.push(name.to_string());
         self.file_info.function_files.push(assembly_index);
@@ -130,7 +145,7 @@ impl CompilerContext {
 
     // find constant index by include definition
     fn find_constant_index_by_include(&self, assembly_name: &str, public_name: &str) -> Option<usize> {
-        if let Some(assembly_state) = self.assemblies.get(assembly_name) {
+        if let Some(assembly_state) = self.assembly_states.get(assembly_name) {
             if let Some(&index) = assembly_state.public_indices.get(public_name) {
                 return Some(index);
             };
@@ -140,15 +155,15 @@ impl CompilerContext {
     }
 
     fn add_assembly(&mut self, assembly: AssemblyState) -> usize {
-        let index = self.assemblies.len();
-        self.assemblies.insert(assembly.filename.clone(), assembly);
+        let index = self.assembly_states.len();
+        self.assembly_states.insert(assembly.filename.clone(), assembly);
         index
     }
 
     fn get_loaded_assemblies(&self) -> HashSet<String> {
         let mut loaded_assemblies = HashSet::new();
 
-        for (filename, _) in self.assemblies.iter() {
+        for (filename, _) in self.assembly_states.iter() {
             loaded_assemblies.insert(filename.clone());
         };
 
@@ -157,12 +172,12 @@ impl CompilerContext {
 
     pub fn to_program(&self) -> Program {
         Program {
-            models: self.models.clone(),
-            functions: self.functions.clone(),
+            models: self.model_definitions.clone(),
+            functions: self.function_definitions.clone(),
             constants: self.constants.clone(),
             global_dependencies: self.global_dependencies.iter().cloned().collect(),
 
-            local_count: self.local_count,
+            local_variable_count: self.local_variable_count,
             local_values: self.local_values.clone(),
 
             entry_point: self.entry_point,
@@ -234,9 +249,9 @@ impl CompilerState {
         if self.locals.contains_key(name) {
             None
         } else {
-            let index = context.local_count;
+            let index = context.local_variable_count;
             self.locals.insert(name.to_string(), index);
-            context.local_count += 1;
+            context.local_variable_count += 1;
             Some(index)
         }
     }
@@ -297,6 +312,12 @@ impl CompilerState {
         function_state.emit(OpCode::LocalGet.to_instruction(0 as u64), this_expression.token.position);
     }
 
+    fn compile_indexed_set(&mut self, context: &mut CompilerContext, function_state: &mut FunctionState, instance: &Box<Expression>, index: &Box<Expression>, op_code: OpCode, position: Position) {
+        self.compile_expression(context, function_state, instance.deref());
+        self.compile_expression(context, function_state, index.deref());
+        function_state.emit_opcode(op_code, position);
+    }
+    
     fn compile_assign_expression_left_part(&mut self, context: &mut CompilerContext, function_state: &mut FunctionState, infix_expression: &InfixExpression) {
         let left_expression = infix_expression.left.deref();
 
@@ -315,16 +336,24 @@ impl CompilerState {
                 }
             },
             Expression::InstanceGet(instance_get_expression) => {
-                self.compile_expression(context, function_state, instance_get_expression.instance.deref());
-                self.compile_expression(context, function_state, instance_get_expression.index.deref());
-
-                function_state.emit_opcode(OpCode::InstanceSet, instance_get_expression.token.position);
+                self.compile_indexed_set(
+                    context,
+                    function_state,
+                    &instance_get_expression.instance,
+                    &instance_get_expression.index,
+                    OpCode::InstanceSet,
+                    instance_get_expression.token.position
+                );
             },
             Expression::IndexGet(index_get_expression) => {
-                self.compile_expression(context, function_state, index_get_expression.instance.deref());
-                self.compile_expression(context, function_state, index_get_expression.index.deref());
-
-                function_state.emit_opcode(OpCode::IndexSet, index_get_expression.token.position);
+                self.compile_indexed_set(
+                    context,
+                    function_state,
+                    &index_get_expression.instance,
+                    &index_get_expression.index,
+                    OpCode::IndexSet,
+                    index_get_expression.token.position
+                );
             },
             _ => self.errors.push_error(&infix_expression.infix, "can not assign")
         }
@@ -691,7 +720,7 @@ impl CompilerState {
         }
 
         if let Some(model_index) = self.find_model_index_by_local_name(context, &implement_definition.model_name) {
-            let model = context.models.get_mut(model_index).unwrap();
+            let model = context.model_definitions.get_mut(model_index).unwrap();
 
             for (name, index) in functions {
                 model.functions.insert(name, index);
@@ -703,7 +732,7 @@ impl CompilerState {
         let mut functions = HashMap::new();
 
         if let Some(model_index) = self.find_model_index_by_local_name(context, &apply_definition.source_model) {
-            let model = context.models.get(model_index).unwrap();
+            let model = context.model_definitions.get(model_index).unwrap();
 
             for (name, &index) in model.functions.iter() {
                 functions.insert(name.clone(), index);
@@ -711,7 +740,7 @@ impl CompilerState {
         };
 
         if let Some(model_index) = self.find_model_index_by_local_name(context, &apply_definition.target_model) {
-            let model = context.models.get_mut(model_index).unwrap();
+            let model = context.model_definitions.get_mut(model_index).unwrap();
 
             for (name, index) in functions{
                 model.functions.insert(name, index);
@@ -747,7 +776,7 @@ pub fn compile_document(document: &Document, context: &mut CompilerContext) -> R
         errors: CompileErrorList::new(&document.filename)
     };
 
-    state.assembly_state.index = context.assemblies.len();
+    state.assembly_state.index = context.assembly_states.len();
 
     state.compile(context, document);
 
@@ -792,7 +821,7 @@ pub fn compile_to(context: &mut CompilerContext, source: &str, filename: &str, f
 
     if !dependency_solver.is_empty() {
         let mut errors = CompileErrorList::new(filename);
-        let cycle_filenames = dependency_solver.get_cycle_reference_list().join(", ");
+        let cycle_filenames = dependency_solver.get_potential_cycle_filenames().join(", ");
 
         errors.push_error(&Token::new(TokenValue::None, Position::none()), &format!("there may have cycle reference in this files [{}]", cycle_filenames));
         return Err(errors);

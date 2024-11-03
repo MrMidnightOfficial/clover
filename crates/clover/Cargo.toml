@@ -8,6 +8,9 @@ repository = "https://github.com/ippan/clover"
 keywords = [ "language", "scripting" ]
 readme = "README.md"
 description = "A scripting language."
+doc = true
 
 [dependencies]
 byteorder = "1.4.3"
+flate2 = "1.0"
+bzip2 = "0.4"   # For Bzip2

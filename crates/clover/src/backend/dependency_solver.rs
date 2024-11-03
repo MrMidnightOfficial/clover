@@ -13,14 +13,13 @@ impl DependencySolver {
             dependencies: HashMap::new(),
             references: HashMap::new(),
             unsolved: HashSet::new()
-        }
-    }
+        }    }
 
     pub fn is_empty(&self) -> bool {
         self.dependencies.is_empty()
     }
 
-    pub fn get_cycle_reference_list(&self) -> Vec<String> {
+    pub fn get_potential_cycle_filenames(&self) -> Vec<String> {
         let mut list = Vec::new();
 
         for (filename, _) in self.dependencies.iter() {
@@ -37,15 +36,11 @@ impl DependencySolver {
             None
         }
     }
-
+    
     pub fn get_next_no_dependency_filename(&self) -> Option<String> {
-        for (filename, &dependency) in self.dependencies.iter() {
-            if dependency == 0 {
-                return Some(filename.clone());
-            };
-        };
-
-        None
+        self.dependencies.iter()
+            .find(|&(_, &dependency)| dependency == 0)
+            .map(|(filename, _)| filename.clone())
     }
 
     pub fn set_loaded(&mut self, filename: &str) {
@@ -94,17 +89,22 @@ impl DependencySolver {
     }
 
     fn add_dependencies(&mut self, document: &Document, loaded_assemblies: &HashSet<String>) {
+        // Add the filename of the document as a dependency.
         self.dependencies.insert(document.filename.clone(), 0);
 
+        // Iterate over each dependency of the document.
         for dependency_filename in document.get_dependencies().iter() {
+            // If the dependency is not loaded, increase the dependency count of the document.
+            // Also, add the source and target of the dependency to the references map.
             if !loaded_assemblies.contains(dependency_filename) {
                 self.increase_dependency(&document.filename);
                 self.add_reference(&document.filename, dependency_filename);
 
+                // If the dependency is not already in the dependencies map, add it to the unsolved set.
                 if !self.dependencies.contains_key(dependency_filename) {
                     self.unsolved.insert(dependency_filename.to_string());
                 }
-            };
-        };
+            }
+        }
     }
 }
