@@ -24,9 +24,11 @@ pub fn instance_get_float(state: &mut State, value: f64, key: &str) -> Result<()
         "integer" => Object::Integer(value as i64),
         "float" => Object::Float(value),
 
+        // Handle unknown property key
         _ => { return Err(RuntimeError::new("unknown property", state.last_position())); }
     };
 
+    // Push the created object onto the state's stack
     state.push(object);
 
     Ok(())

@@ -65,7 +65,9 @@ impl State {
     }
 
     pub fn iterate(&mut self, iterator_index: usize) {
+        // Get the current value at the iterator_index and check if it's an integer
         if let Object::Integer(iterator) = self.current_frame().locals[iterator_index].clone() {
+            // Increment the integer value and update the locals at the iterator_index
             self.current_frame_as_mut().locals[iterator_index] = Object::Integer(iterator + 1);
         };
     }

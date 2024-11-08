@@ -5,4 +5,3 @@ name = "rust"
 
 [analyzers.meta]
 msrv = "stable"
-cyclomatic_complexity_threshold = "very-high"
