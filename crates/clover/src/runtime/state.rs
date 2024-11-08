@@ -78,9 +78,10 @@ impl State {
 
         let mut frame = Frame::new(function.local_variable_count, function_index, self.stack.len());
 
-        for (i, object) in parameters.iter().enumerate() {
-            frame.locals[i] = object.clone();
-        }
+        //for (i, object) in parameters.iter().enumerate() {
+        //    frame.locals[i] = object.clone();
+        //}
+        frame.locals.splice(..parameters.len(), parameters.iter().cloned());
 
         self.push_frame(frame);
 
