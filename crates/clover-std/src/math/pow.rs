@@ -1,8 +1,8 @@
-use clover::{State, Object};
+use clover::{Env, Object};
 use clover::debug::RuntimeError;
 use crate::helper::expect_parameter_count;
 
-pub fn pow(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn pow(state: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     expect_parameter_count(state, parameters, 2)?;
 
     let base_object = parameters[0].clone();

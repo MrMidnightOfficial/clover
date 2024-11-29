@@ -5,7 +5,7 @@ mod runtime;
 pub mod version;
 
 pub use runtime::program::Program;
-pub use runtime::state::State;
+pub use runtime::env::Env;
 pub use runtime::object::Object;
 pub use runtime::object::NativeModel;
 pub use runtime::object::NativeModelInstance;
@@ -64,16 +64,16 @@ impl Clover {
         Ok(Program::deserialize(&mut reader, true).unwrap())
     }
 
-    pub fn create_state_by_filename(&self, filename: &str) -> Result<State, debug::CompileErrorList> {
+    pub fn create_state_by_filename(&self, filename: &str) -> Result<Env, debug::CompileErrorList> {
         let program = self.compile_file(filename)?;
 
         Ok(program.into())
     }
 
     pub fn run(&self, program: Program) -> Result<Object, debug::RuntimeError> {
-        let mut state: State = program.into();
+        let mut env: Env = program.into();
 
-        state.execute()
+        env.execute()
     }
 
 }
@@ -81,12 +81,12 @@ impl Clover {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Clover, State, Object};
+    use crate::{Clover, Env, Object};
 
-    fn execute_function(state: &mut State, function_name: &str) {
+    fn execute_function(env: &mut Env, function_name: &str) {
         let mut function_index = None;
 
-        for (i, name) in state.get_program().file_info.as_ref().unwrap().function_names.iter().enumerate() {
+        for (i, name) in env.get_program().file_info.as_ref().unwrap().function_names.iter().enumerate() {
             if name != function_name {
                 continue;
             };
@@ -95,18 +95,18 @@ mod tests {
             break;
         };
 
-        assert!(function_index.is_some(), "can not found function [{}] in [{}]", function_name, &state.get_program().file_info.as_ref().unwrap().filenames[0]);
+        assert!(function_index.is_some(), "can not found function [{}] in [{}]", function_name, &env.get_program().file_info.as_ref().unwrap().filenames[0]);
 
-        let result = state.execute_by_function_index(function_index.unwrap(), &[]);
+        let result = env.execute_by_function_index(function_index.unwrap(), &[]);
 
-        assert!(result.is_ok(), "error occur when executing function [{}] in [{}]", function_name, &state.get_program().file_info.as_ref().unwrap().filenames[0]);
+        assert!(result.is_ok(), "error occur when executing function [{}] in [{}]", function_name, &env.get_program().file_info.as_ref().unwrap().filenames[0]);
 
         let object = result.unwrap();
 
         if let Object::Boolean(value) = object {
-            assert!(value, "result is not true when executing function [{}] in [{}]", function_name, &state.get_program().file_info.as_ref().unwrap().filenames[0]);
+            assert!(value, "result is not true when executing function [{}] in [{}]", function_name, &env.get_program().file_info.as_ref().unwrap().filenames[0]);
         } else {
-            panic!("result is not a boolean value when executing function [{}] in [{}]", function_name, &state.get_program().file_info.as_ref().unwrap().filenames[0]);
+            panic!("result is not a boolean value when executing function [{}] in [{}]", function_name, &env.get_program().file_info.as_ref().unwrap().filenames[0]);
         };
     }
 
@@ -114,14 +114,14 @@ mod tests {
         let clover = Clover::new();
 
         let result = clover.create_state_by_filename(filename);
-        println!("create state: {:?}", result);
+        //println!("create env: {:?}", result);
 
-        assert!(result.is_ok(), "create state with with file [{}]", filename);
+        assert!(result.is_ok(), "create env with with file [{}]", filename);
 
-        let mut state = result.unwrap();
+        let mut env = result.unwrap();
 
         for function_name in function_names {
-            execute_function(&mut state, *function_name)
+            execute_function(&mut env, *function_name)
         };
     }
 

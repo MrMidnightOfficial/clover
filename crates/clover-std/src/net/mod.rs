@@ -1,4 +1,4 @@
-use clover::{State, Object, NativeModel};
+use clover::{Env, Object, NativeModel};
 use clover::debug::RuntimeError;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -22,38 +22,38 @@ impl NativeModel for Net {
 
 
 // synchronous wrapper function
-fn sync_get(state: &mut State, parameters: &[Object]) -> Result<Object, RuntimeError> {
+fn sync_get(env: &mut Env, parameters: &[Object]) -> Result<Object, RuntimeError> {
     let rt = Runtime::new().unwrap();
-    rt.block_on(async_get(state, parameters))
+    rt.block_on(async_get(env, parameters))
 }
 
-fn has_wifi(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+fn has_wifi(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     let test_url = "http://www.google.com";
     let parameters = vec![Object::String(Rc::new(RefCell::new(test_url.to_string())))];
-    match sync_get(state, &parameters) {
+    match sync_get(env, &parameters) {
         Ok(object) => Ok(Object::Boolean(true)),
         Err(e) => Ok(Object::Boolean(false)),
     }
 }
 
-pub async fn async_get(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub async fn async_get(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     if parameters.len() != 1 {
-        return Err(RuntimeError::new("Expected exactly one parameter", state.last_position()));
+        return Err(RuntimeError::new("Expected exactly one parameter", env.last_position()));
     }
 
     let url = match &parameters[0] {
         Object::String(url) => url.clone(),
-        _ => return Err(RuntimeError::new("Expected a string as the first parameter", state.last_position()))
+        _ => return Err(RuntimeError::new("Expected a string as the first parameter", env.last_position()))
     };
 
     // Simulate a network request
     let url_borrowed = url.borrow();
     let response = reqwest::get(&*url_borrowed).await.map_err(|e| {
-        RuntimeError::new(&format!("Network request failed: {}", e), state.last_position())
+        RuntimeError::new(&format!("Network request failed: {}", e), env.last_position())
     })?;
     let status = response.status(); // Store status before moving response
     let response_text = response.text().await.map_err(|e| {
-        RuntimeError::new(&format!("Failed to read response body: {}", e), state.last_position())
+        RuntimeError::new(&format!("Failed to read response body: {}", e), env.last_position())
     })?;
 
     println!("Status: {}", status); // Use the stored status

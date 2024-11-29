@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::process::exit;
-use clover::{Clover, Program, State};
+use clover::{Clover, Program, Env};
 use clover_std::clover_std_inject_to;
 use clap::{Arg, Parser};
 use serde::{Deserialize, Serialize};
@@ -153,15 +153,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         let output_filename: String = args.output_filename.unwrap_or(if args.filename.ends_with("luck") { args.filename + "y" } else { args.filename + ".lucky" });
 
         let mut file = File::create(output_filename)?;
-
+        // time the function
+        let start = 
         program.serialize(&mut file, true)?;
 
     } else {
-        let mut state = program.into();
+        let mut env = program.into();
 
-        clover_std_inject_to(&mut state);
+        clover_std_inject_to(&mut env);
 
-        state.execute()?;
+        env.execute()?;
     }
 
     Ok(())

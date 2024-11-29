@@ -3,10 +3,10 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 use crate::intermediate::Position;
-use crate::runtime::assembly_information::{DebugInfo, FileInfo};
+use crate::runtime::runtime_info::{DebugInfo, FileInfo};
 use crate::runtime::object::{Object, Reference, make_reference};
 use crate::runtime::opcode::Instruction;
-use crate::runtime::state::Frame;
+use crate::runtime::env::Frame;
 use std::io::{Write, Read};
 use byteorder::{ReadBytesExt, LittleEndian, WriteBytesExt};
 
@@ -14,6 +14,8 @@ use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
 use flate2::Compression;
 //use bzip2::write::BzEncoder;
+
+use color_print::cprintln;
 
 #[derive(Debug, Clone)]
 pub struct RuntimeError {
@@ -152,21 +154,19 @@ impl Function {
         let parameter_count = reader.read_u32::<LittleEndian>()? as usize;
         let local_variable_count = reader.read_u32::<LittleEndian>()? as usize;
         let rescue_position = reader.read_u32::<LittleEndian>()? as usize;
-        let is_instance = reader.read_u8()?;
+        let is_instance = reader.read_u8()? == 1;
 
-        let instruction_count = reader.read_u32::<LittleEndian>()?;
-        let mut instructions = Vec::new();
-
-        for _ in 0..instruction_count {
-            instructions.push(Instruction::from(reader.read_u64::<LittleEndian>()?));
-        };
+        let instruction_count = reader.read_u32::<LittleEndian>()? as usize;
+        let instructions: Result<Vec<Instruction>, std::io::Error> = (0..instruction_count)
+            .map(|_| reader.read_u64::<LittleEndian>().map(Instruction::from))
+            .collect();
 
         Ok(Function {
             parameter_count,
             local_variable_count,
             rescue_position,
-            is_instance: is_instance == 1,
-            instructions
+            is_instance,
+            instructions: instructions?,
         })
     }
 }
@@ -193,11 +193,8 @@ pub struct Program {
 }
 
 fn serialize_string(string: &str, writer: &mut dyn Write) -> Result<(), std::io::Error> {
-    let string_binary = string.as_bytes();
-
-    writer.write_u32::<LittleEndian>(string_binary.len() as u32)?;
-    writer.write_all(string_binary)?;
-
+    writer.write_u32::<LittleEndian>(string.len() as u32)?;
+    writer.write_all(string.as_bytes())?;
     Ok(())
 }
 
@@ -319,23 +316,23 @@ impl Program {
 
     pub fn deserialize(reader: &mut dyn Read, compressed: bool) -> Result<Program, std::io::Error> {
         if Program::HEADER != reader.read_u128::<LittleEndian>()? {
-            println!("warn: header not match");
+            cprintln!("<yellow>warn: header not match</>");
         };
 
-        if crate::version::MAJOR != reader.read_u8()? {
-            println!("warn: major version not match");
-        };
+        let version_checks = [
+            (crate::version::MAJOR, "major"),
+            (crate::version::MINOR, "minor"),
+            (crate::version::PATCH, "patch"),
+        ];
 
-        if crate::version::MINOR != reader.read_u8()? {
-            println!("warn: minor version not match");
-        };
-
-        if crate::version::PATCH != reader.read_u8()? {
-            println!("warn: patch version not match");
-        };
+        for (expected, label) in version_checks.iter() {
+            if expected != &reader.read_u8()? {
+                cprintln!("<yellow>warn: {} version not match</>", label);
+            }
+        }
 
         if 0 != reader.read_u8()? {
-            println!("warn: header end not match");
+            cprintln!("<yellow>warn: header end not match</>");
         };
 
         // Optional Gzip decompression

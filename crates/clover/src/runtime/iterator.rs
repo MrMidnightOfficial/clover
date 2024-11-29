@@ -1,9 +1,9 @@
-use crate::runtime::state::State;
+use crate::runtime::env::Env;
 use crate::runtime::program::RuntimeError;
 use crate::runtime::object::Object;
 
-impl State {
-    /// Advances the iterator of the current enumerable object in the runtime state.
+impl Env {
+    /// Advances the iterator of the current enumerable object in the runtime env.
     ///
     /// This function is responsible for iterating over different types of enumerable objects
     /// (integers, arrays, and instances) and pushing the next value onto the stack. It also

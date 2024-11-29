@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use clover::{NativeModel, NativeModelInstance, Object, Reference, State};
+use clover::{NativeModel, NativeModelInstance, Object, Reference, Env};
 use clover::debug::{Position, RuntimeError};
 use clover::helper::make_reference;
 
@@ -7,7 +7,7 @@ use clover::helper::make_reference;
 pub struct Map;
 
 impl NativeModel for Map {
-    fn call(&mut self, _state: &mut State, _parameters: &[Object]) -> Result<Object, RuntimeError> {
+    fn call(&mut self, _state: &mut Env, _parameters: &[Object]) -> Result<Object, RuntimeError> {
         Ok(Object::NativeInstance(make_reference(MapInstance(HashMap::new()))))
     }
 }
@@ -49,7 +49,7 @@ impl NativeModelInstance for MapInstance {
         }
     }
 
-    fn call(&mut self, _this: Reference<dyn NativeModelInstance>, state: &mut State, key: &str, parameters: &[Object]) -> Result<Object, RuntimeError> {
+    fn call(&mut self, _this: Reference<dyn NativeModelInstance>, env: &mut Env, key: &str, parameters: &[Object]) -> Result<Object, RuntimeError> {
         match key {
             "contain_key" => {
                 // accept one parameter only
@@ -57,10 +57,10 @@ impl NativeModelInstance for MapInstance {
                     let map_key = parameters[0].to_string();
                     Ok(Object::Boolean(self.0.contains_key(&map_key)))
                 } else {
-                    Err(RuntimeError::new(&format!("wrong number of parameters, expect 1 got {}", parameters.len()), state.last_position()))
+                    Err(RuntimeError::new(&format!("wrong number of parameters, expect 1 got {}", parameters.len()), env.last_position()))
                 }
             },
-            _ =>  Err(RuntimeError::new("index does not exists", state.last_position()))
+            _ =>  Err(RuntimeError::new("index does not exists", env.last_position()))
         }
     }
 }

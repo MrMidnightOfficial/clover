@@ -1,12 +1,21 @@
 use crate::runtime::object::{Object, Reference, ModelInstance, make_reference};
 use crate::runtime::program::RuntimeError;
 use crate::runtime::opcode::{OPERATION_ADD, OPERATION_SUB, OPERATION_MULTIPLY, OPERATION_DIVIDE, OPERATION_MOD, OPERATION_EQUAL, OPERATION_GREATER, OPERATION_LESS, OPERATION_GREATER_EQUAL, OPERATION_LESS_EQUAL};
-use crate::runtime::state::State;
+use crate::runtime::env::Env;
 use std::ops::Deref;
 
 const META_METHODS: &[ &str ] = &[ "_add", "_sub", "_mul", "_div", "_mod", "_eq", "_gt", "_lt", "_gte", "_lte" ];
 
-impl State {
+impl Env {
+    fn handle_numeric_operation<F>(&self, left: i64, right: &Object, op: F, float_op: fn(&Self, f64, &Object) -> Result<Object, RuntimeError>) -> Result<Object, RuntimeError> 
+    where F: Fn(i64, i64) -> i64 
+    {
+        match right {
+            Object::Integer(value) => Ok(Object::Integer(op(left, *value))),
+            Object::Float(_) => float_op(self, left as f64, right),
+            _ => Err(RuntimeError::new("cannot perform numeric operation", self.last_position()))
+        }
+    }
 
     fn integer_add(&self, left: i64, right: &Object) -> Result<Object, RuntimeError> {
         match right {
@@ -19,21 +28,11 @@ impl State {
     }
 
     fn integer_sub(&self, left: i64, right: &Object) -> Result<Object, RuntimeError> {
-        match right {
-            Object::Integer(value) => Ok(Object::Integer(left - value)),
-            Object::Float(_) => self.float_sub(left as f64, right),
-
-            _ => Err(RuntimeError::new("can not sub integer with object", self.last_position()))
-        }
+        self.handle_numeric_operation(left, right, |a, b| a - b, Self::float_sub)
     }
 
     fn integer_mul(&self, left: i64, right: &Object) -> Result<Object, RuntimeError> {
-        match right {
-            Object::Integer(value) => Ok(Object::Integer(left * value)),
-            Object::Float(_) => self.float_mul(left as f64, right),
-
-            _ => Err(RuntimeError::new("can not sub integer with object", self.last_position()))
-        }
+        self.handle_numeric_operation(left, right, |a, b| a * b, Self::float_mul)
     }
 
     fn integer_div(&self, left: i64, right: &Object) -> Result<Object, RuntimeError> {
@@ -47,7 +46,7 @@ impl State {
             },
             Object::Float(_) => self.float_div(left as f64, right),
 
-            _ => Err(RuntimeError::new("can not sub integer with object", self.last_position()))
+            _ => Err(RuntimeError::new("can not div integer with object", self.last_position()))
         }
     }
 
@@ -212,7 +211,7 @@ impl State {
             Object::Float(value) => Ok(Object::Boolean(left >= *value)),
             Object::Integer(value) => Ok(Object::Boolean(left >= *value as f64)),
 
-            _ => Err(RuntimeError::new("can not sub float with object", self.last_position()))
+            _ => Err(RuntimeError::new("can not gte float with object", self.last_position()))
         }
     }
 
@@ -277,7 +276,7 @@ impl State {
         self.call_function_by_index(meta_method_index, &[ Object::Instance(left.clone()), right.clone() ])
     }
 
-    pub fn binary_operation_with_parameters(self: &mut State, left: &Object, right: &Object, operand: usize) -> Result<(), RuntimeError> {
+    pub fn binary_operation_with_parameters(self: &mut Env, left: &Object, right: &Object, operand: usize) -> Result<(), RuntimeError> {
         if operand & 256 > 0 {
             self.push(match operand & 255 {
                 // and

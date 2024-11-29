@@ -1,4 +1,4 @@
-use clover::{State, Object, NativeModel};
+use clover::{Env, Object, NativeModel};
 use clover::debug::RuntimeError;
 use sysinfo::{System};
 use std::env;
@@ -28,36 +28,36 @@ impl NativeModel for Os {
 }
 
 
-pub fn clock(_state: &mut State, _parameters: &[Object]) -> Result<Object, RuntimeError> {
+pub fn clock(_state: &mut Env, _parameters: &[Object]) -> Result<Object, RuntimeError> {
     Ok(Object::Float(std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs_f64()))
 }
 
-pub fn get_os(_state: &mut State, _parameters: &[Object]) -> Result<Object, RuntimeError> {
+pub fn get_os(_state: &mut Env, _parameters: &[Object]) -> Result<Object, RuntimeError> {
     Ok(Object::String(std::rc::Rc::new(std::cell::RefCell::new(std::env::consts::OS.to_string()))))
 }
 
-pub fn get_arch(_state: &mut State, _parameters: &[Object]) -> Result<Object, RuntimeError> {
+pub fn get_arch(_state: &mut Env, _parameters: &[Object]) -> Result<Object, RuntimeError> {
     Ok(Object::String(std::rc::Rc::new(std::cell::RefCell::new(std::env::consts::ARCH.to_string()))))
 }
 
-pub fn get_total_memory(_state: &mut State, _parameters: &[Object]) -> Result<Object, RuntimeError> {
+pub fn get_total_memory(_state: &mut Env, _parameters: &[Object]) -> Result<Object, RuntimeError> {
     let mut sys = System::new_all();
     sys.refresh_all();
 
     Ok(Object::Float(sys.total_memory() as f64))
 }
 
-pub fn get_current_user(state: &mut State, _parameters: &[Object]) -> Result<Object, RuntimeError> {
+pub fn get_current_user(env: &mut Env, _parameters: &[Object]) -> Result<Object, RuntimeError> {
     // Get the "USER" environment variable on Unix-like systems or "USERNAME" on Windows
     match env::var("USER").or_else(|_| env::var("USERNAME")) {
         Ok(username) => Ok(Object::String(std::rc::Rc::new(std::cell::RefCell::new(username)))),
-        Err(error) => Err(RuntimeError::new(error.to_string().as_str(), state.last_position()))
+        Err(error) => Err(RuntimeError::new(error.to_string().as_str(), env.last_position()))
     }
 }
 
-pub fn is_file(state: &mut State, parameters: &[Object]) -> Result<Object, RuntimeError> {
+pub fn is_file(env: &mut Env, parameters: &[Object]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No file path provided", state.last_position()));
+        return Err(RuntimeError::new("No file path provided", env.last_position()));
     }
 
     let file_path = parameters[0].to_string();
@@ -65,14 +65,14 @@ pub fn is_file(state: &mut State, parameters: &[Object]) -> Result<Object, Runti
         Ok(metadata) => Ok(Object::Boolean(metadata.is_file())),
         Err(error) => Err(RuntimeError::new(
             format!("Failed to check file '{}': {}", file_path, error).as_str(),
-            state.last_position(),
+            env.last_position(),
         )),
     }
 }
 
-pub fn does_file_exist(state: &mut State, parameters: &[Object]) -> Result<Object, RuntimeError> {
+pub fn does_file_exist(env: &mut Env, parameters: &[Object]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No file path provided", state.last_position()));
+        return Err(RuntimeError::new("No file path provided", env.last_position()));
     }
 
     let file_path = parameters[0].to_string();
@@ -84,16 +84,16 @@ pub fn does_file_exist(state: &mut State, parameters: &[Object]) -> Result<Objec
             } else {
                 Err(RuntimeError::new(
                     format!("Failed to check file '{}': {}", file_path, error).as_str(),
-                    state.last_position(),
+                    env.last_position(),
                 ))
             }
         }
     }
 }
 
-pub fn does_dir_exist(state: &mut State, parameters: &[Object]) -> Result<Object, RuntimeError> {
+pub fn does_dir_exist(env: &mut Env, parameters: &[Object]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No directory path provided", state.last_position()));
+        return Err(RuntimeError::new("No directory path provided", env.last_position()));
     }
 
     let dir_path = parameters[0].to_string();
@@ -105,16 +105,16 @@ pub fn does_dir_exist(state: &mut State, parameters: &[Object]) -> Result<Object
             } else {
                 Err(RuntimeError::new(
                     format!("Failed to check directory '{}': {}", dir_path, error).as_str(),
-                    state.last_position(),
+                    env.last_position(),
                 ))
             }
         }
     }
 }
 
-pub fn get_extension(state: &mut State, parameters: &[Object]) -> Result<Object, RuntimeError> {
+pub fn get_extension(env: &mut Env, parameters: &[Object]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No file path provided", state.last_position()));
+        return Err(RuntimeError::new("No file path provided", env.last_position()));
     }
 
     let file_path = parameters[0].to_string();

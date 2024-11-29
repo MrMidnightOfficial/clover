@@ -4,6 +4,7 @@ use crate::frontend::lexer::lex;
 use std::slice::Iter;
 use std::mem::discriminant;
 use crate::intermediate::TokenValue::Identifier;
+use std::mem;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 enum SymbolPriority {
@@ -29,14 +30,12 @@ struct ParserState<'a> {
 
 impl<'a> ParserState<'a> {
     fn next_token(&mut self) {
-        self.previous_token = self.current_token.clone();
-        self.current_token = self.peek_token.clone();
+        self.previous_token = mem::replace(&mut self.current_token, 
+            mem::replace(&mut self.peek_token, Token::none()));
 
         if let Some(token) = self.tokens.next() {
-            self.peek_token = token.clone();
-        } else {
-            self.peek_token = Token::none();
-        };
+            self.peek_token = token.clone(); 
+        }
     }
 
     fn push_error(&mut self, token: &Token, message: String) {
@@ -48,7 +47,7 @@ impl<'a> ParserState<'a> {
         self.errors.push(error);
     }
 
-    fn get_current_precedence(&self) -> SymbolPriority {
+    fn get_current_priority(&self) -> SymbolPriority {
         match self.current_token.value {
             TokenValue::Assign | TokenValue::PlusAssign | TokenValue::MinusAssign | TokenValue::StarAssign | TokenValue::SlashAssign | TokenValue::PercentAssign => SymbolPriority::Assign,
             TokenValue::And | TokenValue::Or => SymbolPriority::Boolean,
@@ -75,7 +74,7 @@ impl<'a> ParserState<'a> {
     fn skip_until(&mut self, token_values: &[TokenValue]) {
         while !self.current_token_is_any_of(token_values) {
             self.next_token();
-        };
+        }
     }
 
     fn expect_token(&mut self, token_value: TokenValue) -> bool {
@@ -110,37 +109,34 @@ impl<'a> ParserState<'a> {
         Some(Expression::Identifier(IdentifierExpression { token }))
     }
 
-    fn parse_integer_expression(&mut self) -> Option<Expression> {
-        if !self.expect_token(TokenValue::Integer(0)) {
+    fn parse_literal_expression(&mut self, expected_token: TokenValue, constructor: fn(Token) -> Expression) -> Option<Expression> {
+        if !self.expect_token(expected_token) {
             return None;
-        };
-
-        let token = self.current_token.clone();
+        }
+        let token = self.current_token.clone(); 
         self.next_token();
+        Some(constructor(token))
+    }
 
-        Some(Expression::Integer(IntegerExpression { token }))
+    fn parse_integer_expression(&mut self) -> Option<Expression> {
+        self.parse_literal_expression(
+            TokenValue::Integer(0),
+            |token| Expression::Integer(IntegerExpression { token })
+        )
     }
 
     fn parse_float_expression(&mut self) -> Option<Expression> {
-        if !self.expect_token(TokenValue::Float(0.0)) {
-            return None;
-        };
-
-        let token = self.current_token.clone();
-        self.next_token();
-
-        Some(Expression::Float(FloatExpression { token }))
+        self.parse_literal_expression(
+            TokenValue::Float(0.0),
+            |token| Expression::Float(FloatExpression { token })
+        )
     }
 
     fn parse_string_expression(&mut self) -> Option<Expression> {
-        if !self.expect_token(TokenValue::String("".to_string())) {
-            return None;
-        };
-
-        let token = self.current_token.clone();
-        self.next_token();
-
-        Some(Expression::String(StringExpression { token }))
+        self.parse_literal_expression(
+            TokenValue::String("".to_string()),
+            |token| Expression::String(StringExpression { token })
+        )
     }
 
     fn parse_boolean_expression(&mut self) -> Option<Expression> {
@@ -197,7 +193,6 @@ impl<'a> ParserState<'a> {
             None
         }
     }
-
     fn parse_if_expression(&mut self) -> Option<Expression> {
         if !self.current_token_is_any_of(&[ TokenValue::If, TokenValue::ElseIf ]) {
             return None;
@@ -238,7 +233,7 @@ impl<'a> ParserState<'a> {
             None
         }
     }
-
+    
     fn parse_comma_expressions(&mut self, end_tokens: &[ TokenValue ]) -> Option<Vec<Expression>> {
         let mut values = Vec::new();
 
@@ -384,11 +379,11 @@ impl<'a> ParserState<'a> {
             TokenValue::BitAnd | TokenValue::BitOr | TokenValue::Plus | TokenValue::Minus | TokenValue::Star | TokenValue::Slash | TokenValue::Percent
             => {
                 let token = self.current_token.clone();
-                let precedence = self.get_current_precedence();
+                let priority = self.get_current_priority();
 
                 self.next_token();
 
-                if let Some(right) = self.parse_expression(precedence) {
+                if let Some(right) = self.parse_expression(priority) {
                     Some(Expression::Infix(InfixExpression {
                         left: Box::new(expression),
                         infix: token,
@@ -404,11 +399,11 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    fn parse_expression(&mut self, precedence: SymbolPriority) -> Option<Expression> {
+    fn parse_expression(&mut self, priority: SymbolPriority) -> Option<Expression> {
         if let Some(start_expression) = self.parse_start_expression() {
             let mut left_expression = start_expression;
 
-            while self.current_token.value != TokenValue::Eof && precedence < self.get_current_precedence() {
+            while self.current_token.value != TokenValue::Eof && priority < self.get_current_priority() {
                 let expression = left_expression.clone();
 
                 if let Some(new_expression) = self.parse_infix_expression(expression) {
@@ -456,12 +451,7 @@ impl<'a> ParserState<'a> {
         let mut variables = Vec::new();
         let mut values = Vec::new();
 
-        let mut last_is_comma = true;
-
-        while last_is_comma {
-            if !self.expect_token(TokenValue::Identifier("".to_string())) {
-                return None;
-            };
+        while self.expect_token(TokenValue::Identifier("".to_string())) {
             variables.push(self.current_token.clone());
             self.next_token();
 
@@ -469,20 +459,16 @@ impl<'a> ParserState<'a> {
                 self.next_token();
                 values.push(self.parse_expression(SymbolPriority::Lowest));
             } else {
-                values.push(None)
+                values.push(None);
             }
 
-            last_is_comma = self.current_token.value == TokenValue::Comma;
-
-            if last_is_comma {
-                self.next_token();
-            };
+            if self.current_token.value != TokenValue::Comma {
+                break;
+            }
+            self.next_token();
         }
 
-        Some(Statement::Local(LocalStatement {
-            variables,
-            values
-        }))
+        Some(Statement::Local(LocalStatement { variables, values }))
     }
 
     fn parse_for_statement(&mut self) -> Option<Statement> {
@@ -565,14 +551,18 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_body(&mut self, terminators: &[TokenValue]) -> Vec<Statement> {
+        // Initialize an empty vector to store statements
         let mut statements = Vec::new();
 
+        // Continue parsing statements until a terminator token is encountered
         while !self.current_token_is_any_of(terminators) {
+            // Parse and add each statement to the vector, if available
             if let Some(statement) = self.parse_statement() {
                 statements.push(statement);
             };
         };
 
+        // Return the collected statements
         statements
     }
 
@@ -670,26 +660,25 @@ impl<'a> ParserState<'a> {
     fn parse_apply_definition(&mut self) -> Option<Definition> {
         self.next_token();
 
-        if !self.expect_token(TokenValue::Identifier("".to_string())) {
+        let source_model = if self.expect_token(TokenValue::Identifier("".to_string())) {
+            self.current_token.clone()
+        } else {
             return None;
-        }
-        let source_model = self.current_token.clone();
+        };
         self.next_token();
 
         if !self.expect_and_pop_token(TokenValue::To) {
             return None;
-        };
-
-        if !self.expect_token(TokenValue::Identifier("".to_string())) {
-            return None;
         }
-        let target_model = self.current_token.clone();
+
+        let target_model = if self.expect_token(TokenValue::Identifier("".to_string())) {
+            self.current_token.clone()
+        } else {
+            return None;
+        };
         self.next_token();
 
-        Some(Definition::Apply(ApplyDefinition {
-            source_model,
-            target_model
-        }))
+        Some(Definition::Apply(ApplyDefinition { source_model, target_model }))
     }
 
     fn parse_local_definition(&mut self) -> Option<Definition> {
@@ -872,7 +861,7 @@ impl<'a> ParserState<'a> {
 pub fn parse(source: &str, filename: &str) -> Result<Document, CompileErrorList> {
     let token_list = lex(source)?;
 
-    let mut state = ParserState {
+    let mut env = ParserState {
         tokens: token_list.iter(),
         previous_token: Token::none(),
         current_token: Token::none(),
@@ -880,14 +869,14 @@ pub fn parse(source: &str, filename: &str) -> Result<Document, CompileErrorList>
         errors: CompileErrorList::new(filename)
     };
 
-    state.next_token();
-    state.next_token();
+    env.next_token();
+    env.next_token();
 
-    let document = state.parse_document(filename.to_string());
+    let document = env.parse_document(filename.to_string());
 
-    if state.errors.is_empty() {
+    if env.errors.is_empty() {
         Ok(document)
     } else {
-        Err(state.errors)
+        Err(env.errors)
     }
 }

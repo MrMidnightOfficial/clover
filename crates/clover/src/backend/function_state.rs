@@ -13,7 +13,7 @@ pub struct FunctionState {
     pub is_instance: bool,
     pub parameter_count: usize,
     pub local_variable_count: usize,
-    pub depth: usize,
+    pub current_depth: usize,
     pub rescue_position: usize,
     pub scopes: Vec<Scope>,
     pub break_scopes: Vec<BreakScope>,
@@ -23,11 +23,11 @@ pub struct FunctionState {
 
 impl FunctionState {
     pub fn new() -> FunctionState {
-        let mut function_state = FunctionState {
+        let mut func_state = FunctionState {
             is_instance: false,
             parameter_count: 0,
             local_variable_count: 0,
-            depth: 0,
+            current_depth: 0,
             rescue_position: 0,
             scopes: Vec::new(),
             break_scopes: Vec::new(),
@@ -35,9 +35,9 @@ impl FunctionState {
             positions: Positions::new()
         };
 
-        function_state.enter_scope();
+        func_state.enter_scope();
 
-        function_state
+        func_state
     }
 
     pub fn get_last_position(&self) -> Position {
@@ -130,31 +130,30 @@ impl FunctionState {
         self.scopes.pop();
     }
 
-    pub fn enter_break_scope(&mut self) { self.break_scopes.push(BreakScope::new()); }
+    pub fn enter_break_scope(&mut self) {
+        self.break_scopes.push(BreakScope::new());
+    }
 
     pub fn exit_break_scope(&mut self) {
-        let break_scope = self.break_scopes.pop().unwrap();
         let jump_target = self.get_next_instruction_index() as u64;
-
-        for index in break_scope {
-            self.replace_instruction(index, OpCode::Jump.to_instruction(jump_target));
-        }
-
+        self.break_scopes.pop().unwrap().iter().for_each(|index| {
+            self.replace_instruction(*index, OpCode::Jump.to_instruction(jump_target));
+        });
     }
 
     pub fn define_local(&mut self, name: &str) -> Option<usize> {
-        if let Some(scope) = self.scopes.last_mut() {
-            if scope.contains_key(name) {
-                return None;
-            };
+        let Some(scope) = self.scopes.last_mut() else {
+            return None;
+        };
 
-            let index = self.local_variable_count;
-            scope.insert(name.to_string(), index);
-            self.local_variable_count += 1;
-            Some(index)
-        } else {
-            None
+        if scope.contains_key(name) {
+            return None;
         }
+
+        let index = self.local_variable_count;
+        scope.insert(name.to_string(), index);
+        self.local_variable_count += 1;
+        Some(index)
     }
 
     pub fn define_anonymous_local(&mut self) -> usize {

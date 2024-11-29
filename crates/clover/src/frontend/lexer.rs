@@ -18,13 +18,13 @@ macro_rules! match_token {
 }
 
 
-struct LexState<'a> {
+struct LexerState<'a> {
     source: Peekable<Chars<'a>>,
     position: Position, /// The current position in the source
     current: Option<char>
 }
 
-impl<'a> LexState<'a> {
+impl<'a> LexerState<'a> {
     fn skip_spaces_and_comments(&mut self) {
         while self.current.map_or(false, |c| is_space(c) || is_comment_prefix(c)) {
             if self.current.map_or(false, is_space) {
@@ -33,7 +33,8 @@ impl<'a> LexState<'a> {
                 self.skip_comment();
             }
         }
-    }    
+    }
+
     fn skip_comment(&mut self) {
         while self.next_character().is_some() && self.current != Some('\n') {};
     }
@@ -58,34 +59,28 @@ impl<'a> LexState<'a> {
     fn lex_string(&mut self) -> Token {
         let position = self.position;
         let mut value = String::new();
-        let mut is_escaping = false; // Flag to track if the previous character was a backslash
+        let mut is_escaping = false;
 
         while let Some(character) = self.next_character() {
-            if is_escaping {
-                value.push(match character {
-                    '\\' | '\"' => character,
-                    't' => '\t',
-                    'n' => '\n',
-                    'r' => '\r',
-                    _ => character,
-                });
-                is_escaping = false;
-            } else if character == '\"' {
-                break;
-            } else if character == '\\' {
-                is_escaping = true;
-            } else {
-                value.push(character);
+
+            match (is_escaping, character) {
+                (true, '\\' | '\"') => value.push(character),
+                (true, 't') => value.push('\t'),
+                (true, 'n') => value.push('\n'),
+                (true, 'r') => value.push('\r'),
+                (true, _) => value.push(character),
+                (false, '\"') => break,
+                (false, '\\') => is_escaping = true,
+                (false, _) => value.push(character),
             }
+            
         }
 
         if self.current != Some('\"') {
             return Token::new(TokenValue::Invalid("EOF while parsing string".to_string()), position);
-        };
+        }
 
-        // we stop at " character, so move to next
-        self.next_character();
-
+        self.next_character(); // Move past the closing quote
         Token::new(TokenValue::String(value), position)
     }
 
@@ -95,16 +90,13 @@ impl<'a> LexState<'a> {
         let mut is_float = false;
 
         while let Some(c) = self.current {
-            if is_number(c) {
-                number_string.push(c);
-            } else if c == '.' {
-                if is_float || !is_number(self.peek()) {
-                    break;
+            match c {
+                _ if is_number(c) => number_string.push(c),
+                '.' if !is_float && is_number(self.peek()) => {
+                    is_float = true;
+                    number_string.push(c);
                 }
-                is_float = true;
-                number_string.push(c);
-            } else {
-                break;
+                _ => break,
             }
             self.next_character();
         }
@@ -119,23 +111,19 @@ impl<'a> LexState<'a> {
     }
 
     fn lex_identifier(&mut self) -> Token {
-        let mut identifier = String::new();
         let position = self.position;
+        let mut identifier = String::new();
 
-        loop {
-            identifier.push(self.current.expect("Current character should be valid"));
-
-            if self.next_character().is_none() {
+        while let Some(c) = self.current {
+            if is_identifier(c) || is_number(c) {
+                identifier.push(c);
+                self.next_character();
+            } else {
                 break;
-            };
+            }
+        }
 
-            if !is_identifier(self.current.expect("Current character should be valid")) && !is_number(self.current.expect("Current character should be valid")) {
-                break;
-            };
-        };
-
-
-        if let Some(keyword) = get_keyword(identifier.as_str()) {
+        if let Some(keyword) = get_keyword(&identifier) {
             Token::new(keyword, position)
         } else {
             Token::new(TokenValue::Identifier(identifier), position)
@@ -163,12 +151,13 @@ impl<'a> LexState<'a> {
 
         Token::new(get_symbol(symbol_string.as_str()).unwrap(), position)
     }
+
     fn peek(&mut self) -> char {
         self.source.peek().copied().unwrap_or('\0')
     }
 }
 
-impl<'a> Iterator for LexState<'a> {
+impl<'a> Iterator for LexerState<'a> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -299,7 +288,7 @@ fn get_symbol(symbol: &str) -> Option<TokenValue> {
 
 // the main lex function
 pub fn lex(source: &str) -> Result<TokenList, CompileErrorList> {
-    let mut state = LexState {
+    let mut state = LexerState {
         source: source.chars().peekable(),
         position: Position::new(1, 0),
         current: Some('\0')

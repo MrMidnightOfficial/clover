@@ -1,6 +1,6 @@
 use rand::Rng;
 use rand::rngs::ThreadRng;
-use clover::{NativeModel, NativeModelInstance, Object, State, Reference};
+use clover::{NativeModel, NativeModelInstance, Object, Env, Reference};
 use clover::debug::{Position, RuntimeError};
 use clover::helper::make_reference;
 
@@ -8,13 +8,13 @@ use clover::helper::make_reference;
 pub struct Random;
 
 impl NativeModel for Random {
-    fn call(&mut self, state: &mut State, parameters: &[Object]) -> Result<Object, RuntimeError> {
-        Random::new_random(state, parameters)
+    fn call(&mut self, env: &mut Env, parameters: &[Object]) -> Result<Object, RuntimeError> {
+        Random::new_random(env, parameters)
     }
 }
 
 impl Random {
-    pub fn new_random(_state: &mut State, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+    pub fn new_random(_env: &mut Env, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
         let random_instance = RandomInstance {
             random: rand::thread_rng()
         };
@@ -47,27 +47,27 @@ impl NativeModelInstance for RandomInstance {
         Ok(())
     }
 
-    fn call(&mut self, _this: Reference<dyn NativeModelInstance>, state: &mut State, key: &str, parameters: &[Object]) -> Result<Object, RuntimeError> {
+    fn call(&mut self, _this: Reference<dyn NativeModelInstance>, env: &mut Env, key: &str, parameters: &[Object]) -> Result<Object, RuntimeError> {
         match key {
-            "next_integer" => self.next_integer(state, parameters),
-            "next_float" => self.next_float(state, parameters),
-            "within" => self.within(state, parameters),
-            "pick" => self.pick(state, parameters),
+            "next_integer" => self.next_integer(env, parameters),
+            "next_float" => self.next_float(env, parameters),
+            "within" => self.within(env, parameters),
+            "pick" => self.pick(env, parameters),
             _ =>  Err(RuntimeError::new("index does not exists", Position::none()))
         }
     }
 }
 
 impl RandomInstance {
-    pub fn next_integer(&mut self, _state: &mut State, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+    pub fn next_integer(&mut self, _env: &mut Env, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
         Ok(Object::Integer(self.random.gen()))
     }
 
-    pub fn next_float(&mut self, _state: &mut State, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+    pub fn next_float(&mut self, _env: &mut Env, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
         Ok(Object::Float(self.random.gen()))
     }
 
-    pub fn within(&mut self, _state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+    pub fn within(&mut self, _env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
         if parameters.len() == 0 {
             return Ok(Object::Null);
         };
@@ -93,7 +93,7 @@ impl RandomInstance {
         })
     }
 
-    pub fn pick(&mut self, _state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+    pub fn pick(&mut self, _env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
         if parameters.len() == 0 {
             return Ok(Object::Null);
         };

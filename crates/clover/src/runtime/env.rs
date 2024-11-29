@@ -16,10 +16,7 @@ pub struct Frame {
 
 impl Frame {
     pub fn new(local_variable_count: usize, function_index: usize, stack_size: usize) -> Frame {
-        let mut locals = Vec::new();
-        for _ in 0..local_variable_count {
-            locals.push(Object::Null);
-        };
+        let locals = vec![Object::Null; local_variable_count];
 
         Frame {
             locals,
@@ -31,7 +28,7 @@ impl Frame {
 }
 
 #[derive(Debug)]
-pub struct State {
+pub struct Env {
     globals: HashMap<String, Object>,
     locals: Vec<Object>,
     native_models: Vec<Reference<dyn NativeModel>>,
@@ -40,7 +37,7 @@ pub struct State {
     program: Program
 }
 
-impl From<Program> for State {
+impl From<Program> for Env {
     fn from(program: Program) -> Self {
         let mut locals = Vec::new();
 
@@ -52,7 +49,7 @@ impl From<Program> for State {
             });
         };
 
-        State {
+        Env {
             globals: HashMap::new(),
             locals,
             native_models: Vec::new(),
@@ -63,7 +60,7 @@ impl From<Program> for State {
     }
 }
 
-impl State {
+impl Env {
     pub fn get_program(&self) -> &Program {
         &self.program
     }
@@ -175,7 +172,7 @@ impl State {
         for &global_index in self.program.global_dependencies.iter() {
             if let Some(Object::String(global_name)) = self.program.constants.get(global_index) {
                 if !self.globals.contains_key(global_name.borrow().deref()) {
-                    return Err(RuntimeError::new(&format!("this program need a global variable [{}] which is not found in this state", global_name.borrow().deref()), Position::none()));
+                    return Err(RuntimeError::new(&format!("this program need a global variable [{}] which is not found in this env", global_name.borrow().deref()), Position::none()));
                 }
             }
         }
@@ -225,7 +222,7 @@ impl State {
     }
 }
 
-impl State {
+impl Env {
     fn get_top(&mut self) -> Result<Object, RuntimeError> {
         if let Some(object) = self.pop() {
             Ok(object)
@@ -391,33 +388,32 @@ impl State {
     }
 
     fn index_get_model_instance(&mut self, model_instance: Reference<ModelInstance>, index: &Object) -> Result<(), RuntimeError> {
-        if let Object::String(key) = &index {
-            let model = self.program.models.get(model_instance.borrow().deref().model_index).unwrap();
+        let model = self.program.models.get(model_instance.borrow().deref().model_index).unwrap();
 
-            // have property?
-            if let Some(&property_index) = model.property_indices.get(key.borrow().deref()) {
-                self.push(model_instance.borrow().deref().properties[property_index].clone());
-                return Ok(());
-            };
-
-            // have function?
-            if let Some(&function_index) = model.functions.get(key.borrow().deref()) {
-                if self.program.functions[function_index].is_instance {
-                    self.push(Object::InstanceFunction(Box::new(Object::Instance(model_instance.clone())), function_index));
+        match index {
+            Object::String(key) => {
+                if let Some(&property_index) = model.property_indices.get(key.borrow().deref()) {
+                    self.push(model_instance.borrow().deref().properties[property_index].clone());
+                } else if let Some(&function_index) = model.functions.get(key.borrow().deref()) {
+                    let object = if self.program.functions[function_index].is_instance {
+                        Object::InstanceFunction(Box::new(Object::Instance(model_instance.clone())), function_index)
+                    } else {
+                        Object::Function(function_index)
+                    };
+                    self.push(object);
                 } else {
-                    self.push(Object::Function(function_index));
-                };
-
-                return Ok(());
-            };
-
-        } else if let Object::Integer(i) = &index {
-            if let Some(object) = model_instance.borrow().deref().properties.get(*i as usize) {
-                self.push(object.clone());
-                return Ok(());
-            }
+                    self.push(Object::Null);
+                }
+            },
+            Object::Integer(i) => {
+                if let Some(object) = model_instance.borrow().deref().properties.get(*i as usize) {
+                    self.push(object.clone());
+                } else {
+                    self.push(Object::Null);
+                }
+            },
+            _ => self.push(Object::Null),
         }
-        self.push(Object::Null);
 
         Ok(())
     }

@@ -1,4 +1,4 @@
-use clover::{State, Object, NativeModel};
+use clover::{Env, Object, NativeModel};
 use clover::debug::RuntimeError;
 
 #[derive(Debug)]
@@ -15,15 +15,15 @@ impl NativeModel for Array {
 }
 
 
-pub fn push(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn push(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No value provided", state.last_position()));
+        return Err(RuntimeError::new("No value provided", env.last_position()));
     }
 
     // Get the array from the first parameter
     let array = match &parameters[0] {
         Object::Array(array) => array.clone(),
-        _ => return Err(RuntimeError::new("First parameter must be an array", state.last_position()))
+        _ => return Err(RuntimeError::new("First parameter must be an array", env.last_position()))
     };
 
     // Append the remaining parameters to the array
@@ -35,15 +35,15 @@ pub fn push(state: &mut State, parameters: &[ Object ]) -> Result<Object, Runtim
 }
 
 
-pub fn pop(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn pop(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No value provided", state.last_position()));
+        return Err(RuntimeError::new("No value provided", env.last_position()));
     }
     let array = parameters[0].clone();
 
     if let Object::Array(array) = array {
         Ok(array.borrow_mut().pop().unwrap_or(Object::Null))
     } else {
-        Err(RuntimeError::new("First parameter must be an array", state.last_position()))
+        Err(RuntimeError::new("First parameter must be an array", env.last_position()))
     }
 }

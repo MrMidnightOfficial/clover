@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
-use crate::runtime::state::State;
+use crate::runtime::env::Env;
 use crate::runtime::program::RuntimeError;
 use std::ops::Deref;
 use crate::debug::Position;
@@ -12,7 +12,7 @@ pub fn make_reference<T>(object: T) -> Reference<T> {
     Rc::new(RefCell::new(object))
 }
 
-pub type NativeFunction = fn(&mut State, &[Object]) -> Result<Object, RuntimeError>;
+pub type NativeFunction = fn(&mut Env, &[Object]) -> Result<Object, RuntimeError>;
 
 #[derive(Debug)]
 pub struct ModelInstance {
@@ -22,9 +22,9 @@ pub struct ModelInstance {
 
 pub trait NativeModel: std::fmt::Debug {
     // model constructor
-    fn call(&mut self, state: &mut State, _parameters: &[Object]) -> Result<Object, RuntimeError> { Err(RuntimeError::new("this native model do not have constructor", state.last_position())) }
+    fn call(&mut self, env: &mut Env, _parameters: &[Object]) -> Result<Object, RuntimeError> { Err(RuntimeError::new("this native model do not have constructor", env.last_position())) }
 
-    fn model_get(&self, key: &str) -> Result<Object, RuntimeError> { Err(RuntimeError::new(&format!("this native do not have property [{}]", key), Position::none())) }
+    fn model_get(&self, key: &str) -> Result<Object, RuntimeError> { Err(RuntimeError::new(&format!("The property '{}' does not exist in this native model.", key), Position::none())) }
 }
 
 pub trait NativeModelInstance {
@@ -33,7 +33,7 @@ pub trait NativeModelInstance {
     fn instance_get(&self, this: Reference<dyn NativeModelInstance>, key: &str) -> Result<Object, RuntimeError>;
     fn instance_set(&mut self, this: Reference<dyn NativeModelInstance>, key: &str, value: Object) -> Result<(), RuntimeError>;
 
-    fn call(&mut self, this: Reference<dyn NativeModelInstance>, state: &mut State, key: &str, parameters: &[Object]) ->Result<Object, RuntimeError>;
+    fn call(&mut self, this: Reference<dyn NativeModelInstance>, env: &mut Env, key: &str, parameters: &[Object]) ->Result<Object, RuntimeError>;
 
     fn raw_get_integer(&self, _key: &str) -> Option<i64> { None }
     fn raw_get_float(&self, _key: &str) -> Option<f64> { None }
@@ -45,7 +45,7 @@ pub fn ensure_parameters_length(parameters: &[Object], length: usize) -> Result<
     if parameters.len() == length {
         Ok(())
     } else {
-        Err(RuntimeError::new(&format!("need {} parameters, got {}", length, parameters.len()), Position::none()))
+        Err(RuntimeError::new(&format!("Expected {} parameters, but received {}", length, parameters.len()), Position::none()))
     }
 }
 

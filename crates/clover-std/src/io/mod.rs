@@ -1,4 +1,4 @@
-use clover::{State, Object, NativeModel};
+use clover::{Env, Object, NativeModel};
 use clover::debug::RuntimeError;
 use clover::helper::make_reference;
 
@@ -49,7 +49,7 @@ impl NativeModel for IO {
 }
 
 
-pub fn print(_state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn print(_env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     for object in parameters {
         print!("{}", object.to_string());
     };
@@ -59,18 +59,18 @@ pub fn print(_state: &mut State, parameters: &[ Object ]) -> Result<Object, Runt
     Ok(Object::Null)
 }
 
-fn readline(state: &mut State, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+fn readline(env: &mut Env, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     let mut line = String::new();
     if let Err(error) = std::io::stdin().read_line(&mut line) {
-        Err(RuntimeError::new(error.to_string().as_str(), state.last_position()))
+        Err(RuntimeError::new(error.to_string().as_str(), env.last_position()))
     } else {
         Ok(Object::String(make_reference(line)))
     }
 }
 
-pub fn readfile(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn readfile(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No file path provided", state.last_position()));
+        return Err(RuntimeError::new("No file path provided", env.last_position()));
     }
 
     let file_path = parameters[0].to_string();
@@ -78,14 +78,14 @@ pub fn readfile(state: &mut State, parameters: &[ Object ]) -> Result<Object, Ru
         Ok(contents) => Ok(Object::String(make_reference(contents))),
         Err(error) => Err(RuntimeError::new(
             format!("Failed to read file '{}': {}", file_path, error).as_str(),
-            state.last_position(),
+            env.last_position(),
         )),
     }
 }
 
-pub fn writefile(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn writefile(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No file path provided", state.last_position()));
+        return Err(RuntimeError::new("No file path provided", env.last_position()));
     }
 
     let file_path = parameters[0].to_string();
@@ -94,14 +94,14 @@ pub fn writefile(state: &mut State, parameters: &[ Object ]) -> Result<Object, R
         Ok(_) => Ok(Object::Null),
         Err(error) => Err(RuntimeError::new(
             format!("Failed to write to file '{}': {}", file_path, error).as_str(),
-            state.last_position(),
+            env.last_position(),
         )),
     }
 }
 
-pub fn appendfile(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn appendfile(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No file path provided", state.last_position()));
+        return Err(RuntimeError::new("No file path provided", env.last_position()));
     }
 
     let file_path = parameters[0].to_string();
@@ -115,36 +115,36 @@ pub fn appendfile(state: &mut State, parameters: &[ Object ]) -> Result<Object, 
                 Ok(_) => Ok(Object::Null),
                 Err(error) => Err(RuntimeError::new(
                     format!("Failed to write to file '{}': {}", file_path, error).as_str(),
-                    state.last_position(),
+                    env.last_position(),
                 )),
             }
         }
         Err(error) => Err(RuntimeError::new(
             format!("Failed to append to file '{}': {}", file_path, error).as_str(),
-            state.last_position(),
+            env.last_position(),
         )),
     }
 }
 
-pub fn exit(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn exit(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No exit code provided", state.last_position()));
+        return Err(RuntimeError::new("No exit code provided", env.last_position()));
     }
 
     match parameters[0].to_string().parse::<i32>() {
         Ok(exit_code) => std::process::exit(exit_code),
-        Err(_) => Err(RuntimeError::new("Invalid exit code", state.last_position()))
+        Err(_) => Err(RuntimeError::new("Invalid exit code", env.last_position()))
     }
 }
 
-pub fn clear(_state: &mut State, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn clear(_env: &mut Env, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     print!("\x1Bc");
     Ok(Object::Null)
 }
 
-pub fn system(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn system(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No command provided", state.last_position()));
+        return Err(RuntimeError::new("No command provided", env.last_position()));
     }
 
     let command = parameters[0].to_string();
@@ -153,32 +153,32 @@ pub fn system(state: &mut State, parameters: &[ Object ]) -> Result<Object, Runt
     let output = std::process::Command::new(&args[0])
         .args(&args[1..])
         .output()
-        .map_err(|error| RuntimeError::new(error.to_string().as_str(), state.last_position()))?;
+        .map_err(|error| RuntimeError::new(error.to_string().as_str(), env.last_position()))?;
     Ok(Object::String(make_reference(String::from_utf8_lossy(&output.stdout).to_string())))
 }
 
-// pub fn date(state: &mut State, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+// pub fn date(env: &mut env, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
 //     let now = chrono::Local::now();
 //     Ok(Object::String(make_reference(now.format("%Y-%m-%d").to_string())))
 // }
 
-// pub fn time(state: &mut State, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+// pub fn time(env: &mut env, _parameters: &[ Object ]) -> Result<Object, RuntimeError> {
 //     let now = chrono::Local::now();
 //     Ok(Object::String(make_reference(now.format("%H:%M:%S").to_string())))
 // }
 
-pub fn join(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn join(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No strings provided", state.last_position()));
+        return Err(RuntimeError::new("No strings provided", env.last_position()));
     }
 
     let strings: Vec<String> = parameters.iter().map(|value| value.to_string()).collect();
     Ok(Object::String(make_reference(strings.join(" "))))
 }
 
-pub fn endswith(state: &mut State, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+pub fn endswith(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
     if parameters.is_empty() {
-        return Err(RuntimeError::new("No strings provided", state.last_position()));
+        return Err(RuntimeError::new("No strings provided", env.last_position()));
     }
 
     let strings: Vec<String> = parameters.iter().map(|value| value.to_string()).collect();
