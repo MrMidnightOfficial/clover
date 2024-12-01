@@ -1,10 +1,8 @@
 use clover::{Env, Object, NativeModel, Reference, NativeModelInstance};
 use clover::debug::{Position, RuntimeError};
-use mlua::prelude::*;
-use std::rc::Rc;
-use std::cell::RefCell;
 use clover::helper::make_reference;
 use mlua::Lua;
+use crate::helper::expect_parameter_count;
 
 #[derive(Debug)]
 pub struct LuaLib;
@@ -60,12 +58,14 @@ impl NativeModelInstance for LuaInstance {
 
 impl LuaInstance {
     pub fn run_string(&mut self, _env: &mut Env, parameters: &[Object]) -> Result<Object, RuntimeError> {
+        expect_parameter_count(_env, parameters, 1)?;
         let code = parameters[0].to_string().trim().to_string();
         self.lua.load(&code).exec().map_err(|e| RuntimeError::new(&e.to_string(), Position::none()))?;
         Ok(Object::Null)
     }
 
     pub fn run_file(&mut self, _env: &mut Env, parameters: &[Object]) -> Result<Object, RuntimeError> {
+        expect_parameter_count(_env, parameters, 1)?;
         let path = parameters[0].to_string().trim().to_string();
         if !path.ends_with(".lua") {
             return Err(RuntimeError::new("file must be a lua file and end with .lua", Position::none()));
@@ -75,6 +75,7 @@ impl LuaInstance {
     }
 
     pub fn get_var(&mut self, _env: &mut Env, parameters: &[Object]) -> Result<Object, RuntimeError> {
+        expect_parameter_count(_env, parameters, 1)?;
         let name = parameters[0].to_string().trim().to_string();
         let name_trimmed = name.trim().to_string();
         let globals = self.lua.globals();
