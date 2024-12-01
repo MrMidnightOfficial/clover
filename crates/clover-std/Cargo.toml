@@ -15,3 +15,4 @@ rand = "0.8.3"
 sysinfo = "0.31.4"
 reqwest = { version = "0.11", features = ["blocking"] }
 tokio = { version = "1", features = ["full"] }
+mlua = { version = "0.10.2", features = ["lua54", "module"] }

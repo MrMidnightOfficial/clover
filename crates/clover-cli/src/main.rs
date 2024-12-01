@@ -125,7 +125,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Load config if specified
-    let config = if let Some(config_file) = args.filename.strip_suffix(".json") {
+    let _config = if let Some(config_file) = args.filename.strip_suffix(".json") {
         Some(load_config(config_file)?)
     } else {
        // Load config if not specified

@@ -1,11 +1,13 @@
 use clover::{Env, Object, NativeModel};
 use clover::debug::RuntimeError;
-use sysinfo::{System};
+use sysinfo::System;
 use std::env;
 
 use std::rc::Rc;
-use std::cell::RefCell
-;
+use std::cell::RefCell;
+
+
+
 #[derive(Debug)]
 pub struct Os;
 
