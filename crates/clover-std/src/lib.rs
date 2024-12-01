@@ -9,6 +9,7 @@ mod map;
 mod array;
 mod os;
 mod net;
+mod lua;
 
 pub fn clover_std_inject_to(env: &mut Env) {
     env.add_native_function("print", io::print);
@@ -23,4 +24,6 @@ pub fn clover_std_inject_to(env: &mut Env) {
     env.add_native_model("OS", make_reference(os::Os {}));
 
     env.add_native_model("Map", make_reference(map::Map {}));
+
+    env.add_native_model("Lua", make_reference(lua::LuaLib {}));
 }
