@@ -42,11 +42,11 @@ pub trait NativeModelInstance {
 }
 
 pub fn ensure_parameters_length(parameters: &[Object], length: usize) -> Result<(), RuntimeError> {
-    if parameters.len() == length {
-        Ok(())
-    } else {
-        Err(RuntimeError::new(&format!("Expected {} parameters, but received {}", length, parameters.len()), Position::none()))
+    if parameters.len() != length {
+        return Err(RuntimeError::new(&format!("Expected {} parameters, but received {}", length, parameters.len()), Position::none()));
     }
+
+    Ok(())
 }
 
 pub enum Object {
@@ -143,12 +143,10 @@ impl Object {
     }
 
     pub fn float_value(&self) -> Result<f64, RuntimeError> {
-        if let Object::Float(value) = self {
-            Ok(*value)
-        } else if let Object::Integer(value) = self {
-            Ok(*value as f64)
-        } else {
-            Err(RuntimeError::new("value is not a float", Position::none()))
+        match self {
+            Object::Float(value) => Ok(*value),
+            Object::Integer(value) => Ok(*value as f64),
+            _ => Err(RuntimeError::new("value is not a float", Position::none())),
         }
     }
 

@@ -15,3 +15,5 @@ byteorder = "1.4.3"
 flate2 = "1.0"
 bzip2 = "0.4"   # For Bzip2
 color-print = "0.3.7" # For colored output
+
+#clover-std = { path = "../clover-std", version = "0.1.3" }

@@ -1,3 +1,5 @@
+//extern crate clover_std;
+
 mod frontend;
 mod intermediate;
 mod backend;
@@ -14,6 +16,8 @@ pub use runtime::object::Reference;
 use backend::compiler::DefaultStorage;
 use backend::compiler::compile_file;
 use std::ops::{Deref, DerefMut};
+
+//use clover_std::clover_std_inject_to;
 
 pub mod helper {
     pub use crate::runtime::object::make_reference;
@@ -61,7 +65,7 @@ impl Clover {
     pub fn load_program(&self, filename: &str) -> Result<Program, debug::CompileErrorList> {
         let mut reader = self.storage.get_reader(filename)?;
 
-        Ok(Program::deserialize(&mut reader, true).unwrap())
+        Ok(Program::deserialize(&mut reader).unwrap())
     }
 
     pub fn create_state_by_filename(&self, filename: &str) -> Result<Env, debug::CompileErrorList> {
@@ -119,6 +123,7 @@ mod tests {
         assert!(result.is_ok(), "create env with with file [{}]", filename);
 
         let mut env = result.unwrap();
+        //clover_std_inject_to(&mut env);
 
         for function_name in function_names {
             execute_function(&mut env, *function_name)
@@ -163,5 +168,15 @@ mod tests {
     #[test]
     fn convert() {
         execute("tests/convert.luck", &[ "string_to_integer", "string_to_float", "integer_to_string", "integer_to_float", "float_to_string", "float_to_integer" ]);
+    }
+
+    #[test]
+    fn logic() {        
+        execute("tests/logic.luck", &[ "equal", "not_equal" ]);
+    }
+
+    #[test]
+    fn string() {        
+        execute("tests/string.luck", &[ "test_string" ]); //, "test_string_upper"
     }
 }

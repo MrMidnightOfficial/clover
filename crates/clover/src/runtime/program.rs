@@ -231,6 +231,13 @@ impl Program {
         writer.write_u8(crate::version::MINOR)?;
         writer.write_u8(crate::version::PATCH)?;
         writer.write_u8(0)?;
+
+        if compress {
+            writer.write_u8(1)?;
+        } else {
+            writer.write_u8(0)?;
+        }
+
         // First, we will use Bzip2 compression
         //let mut bz_writer = BzEncoder::new(writer, bzip2::Compression::default());
 
@@ -314,7 +321,7 @@ impl Program {
         Ok(())
     }
 
-    pub fn deserialize(reader: &mut dyn Read, compressed: bool) -> Result<Program, std::io::Error> {
+    pub fn deserialize(reader: &mut dyn Read) -> Result<Program, std::io::Error> {
         if Program::HEADER != reader.read_u128::<LittleEndian>()? {
             cprintln!("<yellow>warn: header not match</>");
         };
@@ -334,6 +341,9 @@ impl Program {
         if 0 != reader.read_u8()? {
             cprintln!("<yellow>warn: header end not match</>");
         };
+
+        // Check if compressed
+        let compressed = reader.read_u8()? == 1;
 
         // Optional Gzip decompression
         let mut reader: Box<dyn Read> = if compressed {

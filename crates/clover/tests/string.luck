@@ -1,0 +1,11 @@
+function test_string()
+    local a = "hello"
+    local b = "world"
+
+    a + b == "helloworld"
+end
+
+//function test_string_upper()
+//    local a = "hello"
+//    IO.toupper(a) == "HELLO"
+//end

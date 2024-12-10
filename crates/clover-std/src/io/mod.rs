@@ -32,7 +32,7 @@ impl NativeModel for IO {
             //"time" => Ok(Object::NativeFunction(time)), // Get current time
             //"rand" => Ok(Object::NativeFunction(rand)), // Generate random number
             //"date" => Ok(Object::NativeFunction(date)), // Get current date
-            //"toupper" => Ok(Object::NativeFunction(toupper)), // Convert string to uppercase
+            "toupper" => Ok(Object::NativeFunction(to_upper)), // Convert string to uppercase
             //"tolower" => Ok(Object::NativeFunction(tolower)), // Convert string to lowercase
             //"split" => Ok(Object::NativeFunction(split)), // Split a string into parts
             "join" => Ok(Object::NativeFunction(join)), // Join parts into a string
@@ -183,4 +183,13 @@ pub fn endswith(env: &mut Env, parameters: &[ Object ]) -> Result<Object, Runtim
 
     let strings: Vec<String> = parameters.iter().map(|value| value.to_string()).collect();
     Ok(Object::Boolean(strings[0].ends_with(&strings[1])))
+}
+
+pub fn to_upper(env: &mut Env, parameters: &[ Object ]) -> Result<Object, RuntimeError> {
+    if parameters.is_empty() {
+        return Err(RuntimeError::new("No strings provided", env.last_position()));
+    }
+
+    let strings: Vec<String> = parameters.iter().map(|value| value.to_string()).collect();
+    Ok(Object::String(make_reference(strings[0].to_uppercase())))
 }

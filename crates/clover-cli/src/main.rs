@@ -1,12 +1,14 @@
+use clap::Parser;
+use clover::{Clover, Program};
+use clover_std::clover_std_inject_to;
+use serde::{Deserialize, Serialize};
+
 use std::error::Error;
+use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::process::exit;
-use clover::{Clover, Program, Env};
-use clover_std::clover_std_inject_to;
-use clap::{Arg, Parser};
-use serde::{Deserialize, Serialize};
-use std::fmt;
+
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Config {
@@ -144,7 +146,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         let mut file = File::open(filename)?;
-        Program::deserialize(&mut file, true)?
+        Program::deserialize(&mut file)?
     } else {
         pie.compile_file(filename.as_str())?
     };
@@ -154,8 +156,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut file = File::create(output_filename)?;
         // time the function
-        let start = 
+        let start = std::time::Instant::now();
         program.serialize(&mut file, true)?;
+        let end = std::time::Instant::now();
+        let duration = end - start;
+        println!("Compiled in {}ns", duration.as_nanos()); //.as_millis() #ms
 
     } else {
         let mut env = program.into();

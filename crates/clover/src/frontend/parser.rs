@@ -1,10 +1,12 @@
 use crate::intermediate::{Token, CompileErrorList, TokenValue, CompileError};
 use crate::intermediate::ast::{Document, Definition, ModelDefinition, FunctionDefinition, Statement, ImplementDefinition, ApplyDefinition, LocalDefinition, IncludeDefinition, ReturnStatement, Expression, IdentifierExpression, IntegerExpression, FloatExpression, BooleanExpression, ThisExpression, NullExpression, PrefixExpression, IfExpression, InfixExpression, CallExpression, StringExpression, InstanceGetExpression, LocalStatement, ArrayExpression, IndexGetExpression, ForStatement, BreakStatement, RescueStatement};
-use crate::frontend::lexer::lex;
-use std::slice::Iter;
-use std::mem::discriminant;
 use crate::intermediate::TokenValue::Identifier;
+use crate::frontend::lexer::lex;
+
+use std::mem::discriminant;
 use std::mem;
+use std::slice::Iter;
+
 
 #[derive(Debug, PartialEq, PartialOrd)]
 enum SymbolPriority {
